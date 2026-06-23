@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "477232001441",
+    "project_id": "terrarium-app-26837",
+    "storage_bucket": "terrarium-app-26837.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:477232001441:android:734b0f14be0bf653355be0",
+        "android_client_info": {
+          "package_name": "com.example.terra_flutter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "477232001441-ho6ssrfjeve4flj9cvap3fqt6pohm47e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNT0p2R8mbCM7e__HYCWBWpPGUFmejlk8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "477232001441-ho6ssrfjeve4flj9cvap3fqt6pohm47e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.terrariumApp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:477232001441:android:675dae23731e4750355be0",
+        "android_client_info": {
+          "package_name": "com.example.terrarium_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "477232001441-ho6ssrfjeve4flj9cvap3fqt6pohm47e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNT0p2R8mbCM7e__HYCWBWpPGUFmejlk8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "477232001441-ho6ssrfjeve4flj9cvap3fqt6pohm47e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.terrariumApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
