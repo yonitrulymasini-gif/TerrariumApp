@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/theme_service.dart';
 
 class TerraButton extends StatelessWidget {
   final String label;
@@ -24,7 +25,7 @@ class TerraButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           decoration: BoxDecoration(
-            color: color ?? AppColors.accentGreen,
+            color: color ?? ThemeService.instance.colors.primary,
             borderRadius: BorderRadius.circular(50),
           ),
           padding: const EdgeInsets.symmetric(vertical: 18),
@@ -95,7 +96,7 @@ class _TerraToggleState extends State<TerraToggle>
               borderRadius: BorderRadius.circular(15),
               color: Color.lerp(
                 const Color(0x20FFFFFF),
-                AppColors.liveGreen,
+                ThemeService.instance.colors.primary,
                 _anim.value,
               ),
             ),
@@ -114,7 +115,7 @@ class _TerraToggleState extends State<TerraToggle>
                       color: Colors.white,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 4,
                           offset: const Offset(0, 1),
                         ),

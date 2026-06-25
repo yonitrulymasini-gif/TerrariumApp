@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../services/theme_service.dart';
+import '../services/device_service.dart';
+import '../utils/fade_route.dart';
+import 'pairing_screen.dart';
+import 'qr_scanner_screen.dart';
 
 class MesuresScreen extends StatefulWidget {
   const MesuresScreen({super.key});
@@ -9,6 +14,20 @@ class MesuresScreen extends StatefulWidget {
 }
 
 class _MesuresScreenState extends State<MesuresScreen> {
+  @override
+  void initState() {
+    super.initState();
+    DeviceService.instance.addListener(_onDeviceChange);
+  }
+
+  @override
+  void dispose() {
+    DeviceService.instance.removeListener(_onDeviceChange);
+    super.dispose();
+  }
+
+  void _onDeviceChange() => setState(() {});
+
   final _states = [false, false, false, false];
   static const _relayNames = ['Lampe UV', 'Chauffage', 'Brumisateur', 'Ventilateur'];
   static const _relaySubs = ['Prise 1', 'Prise 2', 'Prise 3', 'Prise 4'];
@@ -16,13 +35,91 @@ class _MesuresScreenState extends State<MesuresScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!DeviceService.instance.hasDevice) {
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 32, 28, 120),
+            child: Column(children: [
+              Row(children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('DONNÉES', style: AppTextStyles.eyebrow),
+                  const SizedBox(height: 6),
+                  Text('Mesures', style: AppTextStyles.serif28),
+                ]),
+              ]),
+              const Spacer(),
+              Container(
+                width: 100, height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: ThemeService.instance.colors.primary.withValues(alpha: 0.10),
+                  border: Border.all(color: ThemeService.instance.colors.primary.withValues(alpha: 0.25), width: 2),
+                ),
+                child: Icon(Icons.show_chart, size: 44, color: ThemeService.instance.colors.primary.withValues(alpha: 0.7)),
+              ),
+              const SizedBox(height: 28),
+              Text('Connecte ton Terra', style: AppTextStyles.serif28),
+              const SizedBox(height: 12),
+              Text(
+                'Les mesures sont disponibles\nuniquement avec un boîtier connecté.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: ThemeService.instance.colors.textMuted, height: 1.7),
+              ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => Navigator.of(context).push(fadeRoute(const PairingScreen())),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: ThemeService.instance.colors.primary,
+                    borderRadius: BorderRadius.circular(50),
+                    boxShadow: [BoxShadow(color: ThemeService.instance.colors.primary.withValues(alpha: 0.3),
+                        blurRadius: 20, offset: const Offset(0, 6))],
+                  ),
+                  child: Text('Connecter un appareil', textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ThemeService.instance.colors.bg)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: () async {
+                  final deviceId = await Navigator.of(context).push<String>(
+                    MaterialPageRoute(builder: (_) => const QrScannerScreen(), fullscreenDialog: true),
+                  );
+                  if (deviceId != null && context.mounted) {
+                    Navigator.of(context).push(fadeRoute(PairingScreen(prefillDeviceId: deviceId)));
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 17),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(color: ThemeService.instance.colors.border),
+                  ),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.qr_code_scanner, color: ThemeService.instance.colors.textSecondary, size: 18),
+                    const SizedBox(width: 10),
+                    Text('Scanner le QR code', style: TextStyle(fontSize: 15, color: ThemeService.instance.colors.textSecondary)),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 32, 20, 120),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('MESURES', style: AppTextStyles.eyebrow),
+            Text('MESURES', style: AppTextStyles.eyebrow),
             const SizedBox(height: 6),
             Text('Dashboard', style: AppTextStyles.serif28),
             const SizedBox(height: 24),
@@ -38,7 +135,7 @@ class _MesuresScreenState extends State<MesuresScreen> {
             _SensorCard(icon: Icons.water_drop_outlined, iconColor: Color(0xFF38BDF8), label: 'Humidité', sensor: 'AM2320', value: '—', unit: '%', large: true),
             const SizedBox(height: 28),
 
-            const Text('CONTRÔLE DES PRISES', style: AppTextStyles.eyebrow),
+            Text('CONTRÔLE DES PRISES', style: AppTextStyles.eyebrow),
             const SizedBox(height: 12),
 
             for (int i = 0; i < 4; i++) ...[
@@ -51,15 +148,15 @@ class _MesuresScreenState extends State<MesuresScreen> {
                     Container(
                       width: 44, height: 44,
                       decoration: BoxDecoration(
-                        color: _states[i] ? AppColors.primary.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.06),
+                        color: _states[i] ? ThemeService.instance.colors.primary.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Icon(_relayIcons[i], size: 20, color: _states[i] ? AppColors.primary : AppColors.textMuted),
+                      child: Icon(_relayIcons[i], size: 20, color: _states[i] ? ThemeService.instance.colors.primary : ThemeService.instance.colors.textMuted),
                     ),
                     const SizedBox(width: 14),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(_relayNames[i], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
-                      Text(_relaySubs[i], style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      Text(_relayNames[i], style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
+                      Text(_relaySubs[i], style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
                     ])),
                     GestureDetector(
                       onTap: () => setState(() => _states[i] = !_states[i]),
@@ -67,7 +164,7 @@ class _MesuresScreenState extends State<MesuresScreen> {
                         duration: const Duration(milliseconds: 200),
                         width: 48, height: 28,
                         decoration: BoxDecoration(
-                          color: _states[i] ? AppColors.primary : const Color(0xFF2A3A2A),
+                          color: _states[i] ? ThemeService.instance.colors.primary : AppColors.card,
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: AnimatedAlign(
@@ -76,7 +173,7 @@ class _MesuresScreenState extends State<MesuresScreen> {
                           child: Container(
                             width: 22, height: 22,
                             margin: const EdgeInsets.symmetric(horizontal: 3),
-                            decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.bg,
+                            decoration: BoxDecoration(shape: BoxShape.circle, color: ThemeService.instance.colors.bg,
                               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
                           ),
                         ),
@@ -88,8 +185,8 @@ class _MesuresScreenState extends State<MesuresScreen> {
             ],
 
             const SizedBox(height: 8),
-            const Center(child: Text('Connecte ton ESP32 via MQTT pour activer les données en direct',
-                textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.6))),
+            Center(child: Text('Connecte ton ESP32 via MQTT pour activer les données en direct',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted, height: 1.6))),
           ]),
         ),
       ),
@@ -112,15 +209,15 @@ class _SensorCard extends StatelessWidget {
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Row(children: [
             Icon(icon, size: 14, color: iconColor), const SizedBox(width: 6),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textMuted)),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textMuted)),
           ]),
-          Text(sensor, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          Text(sensor, style: TextStyle(fontSize: 10, color: ThemeService.instance.colors.textMuted)),
         ]),
         const SizedBox(height: 10),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Text(value, style: GoogleFonts.fraunces(fontSize: large ? 42 : 28, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+          Text(value, style: GoogleFonts.fraunces(fontSize: large ? 42 : 28, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
           const SizedBox(width: 4),
-          Text(unit, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
+          Text(unit, style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textMuted)),
         ]),
       ]),
     );

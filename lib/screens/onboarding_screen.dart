@@ -38,7 +38,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _SlideData(
       icon: Icons.monitor_heart_outlined,
       title: 'Surveille en temps réel',
-      text: 'Température, humidité, état des prises — tout est synchronisé via tes capteurs ESP32.',
+      text: 'Température, humidité, état des prises — tout est synchronisé via tes capteurs',
       accent: 'sun',
     ),
     _SlideData(
@@ -127,7 +127,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final isLeaf = slide.accent == 'leaf';
     final circleColor = isLeaf ? AppColors.primary : AppColors.accent;
 
-    return Scaffold(
+    return GestureDetector(
+      onHorizontalDragEnd: (d) {
+        final v = d.primaryVelocity ?? 0;
+        if (v < -200 && _step < _slides.length - 1) _goToStep(_step + 1);
+        if (v > 200 && _step > 0) _goToStep(_step - 1);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bg,
       body: Stack(
         children: [
@@ -139,7 +145,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   center: const Alignment(0, -0.8),
                   radius: 1.2,
                   colors: [
-                    const Color(0xFF1F3D2B).withValues(alpha: 0.55),
+                    AppColors.canopy.withValues(alpha: 0.55),
                     Colors.transparent,
                   ],
                   stops: const [0, 0.6],
@@ -154,7 +160,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   center: const Alignment(0, 1.2),
                   radius: 1.2,
                   colors: [
-                    const Color(0xFF162318).withValues(alpha: 0.5),
+                    AppColors.card.withValues(alpha: 0.5),
                     Colors.transparent,
                   ],
                   stops: const [0, 0.6],
@@ -180,13 +186,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           child: AnimatedOpacity(
                             opacity: _step > 0 ? 1.0 : 0.0,
                             duration: const Duration(milliseconds: 200),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.arrow_back_ios, size: 14, color: AppColors.textMuted),
-                                SizedBox(width: 2),
-                                Text('Retour', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
-                              ],
-                            ),
+                            child: Text('Retour', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
                           ),
                         ),
                         RichText(
@@ -199,7 +199,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         ),
                         GestureDetector(
                           onTap: _skip,
-                          child: const Text(
+                          child: Text(
                             'Passer',
                             style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                           ),
@@ -210,12 +210,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                   // Contenu (fade-in + slide-in-from-bottom)
                   Expanded(
-                    child: GestureDetector(
-                      onHorizontalDragEnd: (d) {
-                        if ((d.primaryVelocity ?? 0) > 200 && _step < _slides.length - 1) _goToStep(_step + 1);
-                        if ((d.primaryVelocity ?? 0) < -200 && _step > 0) _goToStep(_step - 1);
-                      },
-                      child: AnimatedBuilder(
+                    child: AnimatedBuilder(
                         animation: Listenable.merge([_fadeAnim, _slideAnim, _pulseAnim, _swayAnim]),
                         builder: (_, __) {
                           return Opacity(
@@ -284,7 +279,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
                                   Text(
                                     slide.text,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 15,
                                       color: AppColors.textMuted,
                                       height: 1.65,
@@ -296,7 +291,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ),
                           );
                         },
-                      ),
                     ),
                   ),
 
@@ -360,7 +354,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
