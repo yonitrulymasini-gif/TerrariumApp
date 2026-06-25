@@ -34,7 +34,7 @@
               "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.terrariumApp"
+                "bundle_id": "com.yoni.terrariumApp"
               }
             }
           ]
@@ -70,7 +70,7 @@
               "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.terrariumApp"
+                "bundle_id": "com.yoni.terrariumApp"
               }
             }
           ]
