@@ -10,7 +10,9 @@ class AuthService {
       ..addScope('email')
       ..addScope('profile');
 
-    final result = await _auth.signInWithPopup(provider);
+    // signInWithProvider : flux OAuth natif iOS/Android (Safari + retour via
+    // l'URL scheme du reversed client ID). signInWithPopup est web uniquement.
+    final result = await _auth.signInWithProvider(provider);
     return result.user;
   }
 
@@ -19,7 +21,7 @@ class AuthService {
       ..addScope('email')
       ..addScope('name');
 
-    final result = await _auth.signInWithPopup(provider);
+    final result = await _auth.signInWithProvider(provider);
     return result.user;
   }
 
