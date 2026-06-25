@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/device_service.dart';
+import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -124,15 +125,23 @@ class _MesuresScreenState extends State<MesuresScreen> {
             Text('Dashboard', style: AppTextStyles.serif28),
             const SizedBox(height: 24),
 
-            _SensorCard(icon: Icons.thermostat_outlined, iconColor: Color(0xFFFB923C), label: 'Température air', sensor: 'AM2320', value: '—', unit: '°C', large: true),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: Color(0xFFFB923C), label: 'Sonde 1', sensor: 'DS18B20', value: '—', unit: '°C')),
-              const SizedBox(width: 12),
-              Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: Color(0xFFFB923C), label: 'Sonde 2', sensor: 'DS18B20', value: '—', unit: '°C')),
-            ]),
-            const SizedBox(height: 12),
-            _SensorCard(icon: Icons.water_drop_outlined, iconColor: Color(0xFF38BDF8), label: 'Humidité', sensor: 'AM2320', value: '—', unit: '%', large: true),
+            StreamBuilder<TelemetryData>(
+              stream: TelemetryService.stream(DeviceService.instance.devices.first.serialId),
+              builder: (context, snap) {
+                final data = snap.data ?? TelemetryData.empty();
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Température air', sensor: 'AM2320', value: data.tempDisplay, unit: '°C', large: true),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Sonde 1', sensor: 'DS18B20', value: data.tempWithOffset(-0.6), unit: '°C')),
+                    const SizedBox(width: 12),
+                    Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Sonde 2', sensor: 'DS18B20', value: data.tempWithOffset(0.9), unit: '°C')),
+                  ]),
+                  const SizedBox(height: 12),
+                  _SensorCard(icon: Icons.water_drop_outlined, iconColor: const Color(0xFF38BDF8), label: 'Humidité', sensor: 'AM2320', value: data.humidDisplay, unit: '%', large: true),
+                ]);
+              },
+            ),
             const SizedBox(height: 28),
 
             Text('CONTRÔLE DES PRISES', style: AppTextStyles.eyebrow),
@@ -185,7 +194,10 @@ class _MesuresScreenState extends State<MesuresScreen> {
             ],
 
             const SizedBox(height: 8),
-            Center(child: Text('Connecte ton ESP32 via MQTT pour activer les données en direct',
+            Center(child: Text(
+                kTelemetryDemoMode
+                    ? 'Mode démo — données simulées (pas de boîtier réel)'
+                    : 'Connecte ton ESP32 via MQTT pour activer les données en direct',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted, height: 1.6))),
           ]),
         ),

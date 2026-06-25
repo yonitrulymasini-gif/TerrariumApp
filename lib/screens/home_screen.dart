@@ -344,6 +344,7 @@ class _MetricCell extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   // Pas de const : ce widget lit le thème et doit pouvoir se reconstruire.
+  // ignore: prefer_const_constructors_in_immutables
   _EmptyState();
 
   @override
