@@ -9,6 +9,11 @@ import 'main_shell.dart';
 import 'onboarding_screen.dart';
 import 'register_screen.dart';
 
+// "Se connecter avec Apple" exige l'entitlement Sign in with Apple, réservé aux
+// comptes Apple Developer payants. Indisponible en sideload (Sideloadly/AltStore
+// + Apple ID gratuit). Passer à true si un jour on a un compte payant.
+const bool kAppleSignInEnabled = false;
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -126,10 +131,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 _SocialButton(onTap: _signInGoogle, loading: _loadingGoogle,
                     logo: const _GoogleLogo(), label: 'Continuer avec Google'),
-                const SizedBox(height: 12),
-                _SocialButton(onTap: _signInApple, loading: _loadingApple,
-                    logo: const _AppleLogo(),
-                    label: 'Continuer avec Apple'),
+                if (kAppleSignInEnabled) ...[
+                  const SizedBox(height: 12),
+                  _SocialButton(onTap: _signInApple, loading: _loadingApple,
+                      logo: const _AppleLogo(),
+                      label: 'Continuer avec Apple'),
+                ],
                 const SizedBox(height: 28),
 
                 Row(children: [
