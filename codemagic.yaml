@@ -1,0 +1,35 @@
+workflows:
+  ios-workflow:
+    name: iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    # working_directory: terrarium_app
+    scripts:
+      - name: Get packages
+        script: flutter packages pub get
+      - name: Set iOS 15 minimum
+        script: |
+          perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = \d+\.\d+/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' ios/Runner.xcodeproj/project.pbxproj
+          plutil -replace MinimumOSVersion -string 15.0 ios/Flutter/AppFrameworkInfo.plist || true
+      - name: Pod install
+        script: |
+          cd ios
+          pod repo update
+          pod install
+          cd ..
+      - name: Build iOS unsigned for sideload
+        script: flutter build ios --release --no-codesign
+      - name: Package unsigned IPA
+        script: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -r -9 app-unsigned.ipa Payload
+          rm -rf Payload
+    artifacts:
+      - build/ios/iphoneos/app-unsigned.ipa
+      - /tmp/xcodebuild_logs/*.log

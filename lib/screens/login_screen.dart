@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../utils/fade_route.dart';
 import 'main_shell.dart';
 import 'onboarding_screen.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loadingGoogle = false;
   bool _loadingApple = false;
   bool _loadingEmail = false;
+  bool _loadingAnon = false;
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
 
@@ -72,6 +74,18 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _signInAnon() async {
+    setState(() => _loadingAnon = true);
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+      if (mounted) _goHome();
+    } catch (_) {
+      if (mounted) _showError('Connexion anonyme impossible');
+    } finally {
+      if (mounted) setState(() => _loadingAnon = false);
+    }
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
@@ -91,11 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onTap: _goBack,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-              child: Row(children: [
-                const Icon(Icons.arrow_back, color: AppColors.textSecondary, size: 18),
-                const SizedBox(width: 6),
-                const Text('Retour', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-              ]),
+              child: Text('Retour', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
             ),
           ),
           Expanded(
@@ -104,13 +114,13 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(children: [
                 Container(
                   width: 72, height: 72,
-                  decoration: const BoxDecoration(color: Color(0xFF1E3626), shape: BoxShape.circle),
-                  child: const Icon(Icons.eco, color: AppColors.iconGreen, size: 36),
+                  decoration: BoxDecoration(color: AppColors.canopy, shape: BoxShape.circle),
+                  child: Icon(Icons.eco, color: AppColors.iconGreen, size: 36),
                 ),
                 const SizedBox(height: 24),
                 Text('Bon retour', style: AppTextStyles.serif32),
                 const SizedBox(height: 8),
-                const Text('Connecte-toi à ta jungle',
+                Text('Connecte-toi à ta jungle',
                     style: TextStyle(fontSize: 15, color: AppColors.textMuted)),
                 const SizedBox(height: 36),
 
@@ -139,12 +149,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     onTap: _loadingEmail ? () {} : _signInEmail),
                 const SizedBox(height: 20),
 
-                RichText(text: const TextSpan(
-                  text: 'Pas encore de compte ? ',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 14),
-                  children: [TextSpan(text: 'Inscris-toi',
-                      style: TextStyle(color: AppColors.accentGreen, fontWeight: FontWeight.w500))],
-                )),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(fadeRoute(const RegisterScreen())),
+                  child: RichText(text: TextSpan(
+                    text: 'Pas encore de compte ? ',
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                    children: [TextSpan(text: 'Inscris-toi',
+                        style: TextStyle(color: AppColors.accentGreen, fontWeight: FontWeight.w500,
+                            decoration: TextDecoration.underline, decorationColor: AppColors.accentGreen))],
+                  )),
+                ),
+                const SizedBox(height: 28),
+                GestureDetector(
+                  onTap: _loadingAnon ? null : _signInAnon,
+                  child: _loadingAnon
+                      ? SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMuted))
+                      : Text('Continuer sans compte →',
+                          style: TextStyle(fontSize: 14, color: AppColors.textMuted,
+                              decoration: TextDecoration.underline, decorationColor: AppColors.textMuted)),
+                ),
               ]),
             ),
           ),
@@ -169,18 +193,21 @@ class _SocialButton extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 17),
         decoration: BoxDecoration(
-          color: const Color(0xFF192D1E),
+          color: AppColors.card,
           borderRadius: BorderRadius.circular(50),
           border: Border.all(color: AppColors.border),
         ),
         child: loading
-            ? const Center(child: SizedBox(width: 20, height: 20,
+            ? Center(child: SizedBox(width: 20, height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textSecondary)))
-            : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                SizedBox(width: 22, height: 22, child: logo),
-                const SizedBox(width: 12),
-                Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
-              ]),
+            : SizedBox(
+                width: 220,
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  SizedBox(width: 22, height: 22, child: logo),
+                  const SizedBox(width: 12),
+                  Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                ]),
+              ),
       ),
     );
   }
@@ -206,23 +233,33 @@ class _AppleLogo extends StatelessWidget {
   const _AppleLogo();
 
   static const _svg = '''
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 814 1000">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-93 0 1000 1000">
   <path fill="white" d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 790.7 0 663 0 541.8c0-207.3 130.3-316.7 260.6-316.7 67.4 0 123.5 44.4 165.3 44.4 39.5 0 101.1-47 176.3-47 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/>
 </svg>''';
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: SvgPicture.string(_svg),
-  );
+  Widget build(BuildContext context) => SvgPicture.string(_svg, fit: BoxFit.contain);
 }
 
-class _TerraInput extends StatelessWidget {
+class _TerraInput extends StatefulWidget {
   final String hint;
   final IconData icon;
   final bool obscure;
   final TextEditingController controller;
   const _TerraInput({required this.hint, required this.icon, this.obscure = false, required this.controller});
+
+  @override
+  State<_TerraInput> createState() => _TerraInputState();
+}
+
+class _TerraInputState extends State<_TerraInput> {
+  late bool _obscure;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscure = widget.obscure;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -232,12 +269,21 @@ class _TerraInput extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: TextField(
-        controller: controller, obscureText: obscure,
-        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+        controller: widget.controller, obscureText: _obscure,
+        style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
         decoration: InputDecoration(
-          hintText: hint,
+          hintText: widget.hint,
           hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 15),
-          prefixIcon: Icon(icon, color: AppColors.textMuted, size: 20),
+          prefixIcon: Icon(widget.icon, color: AppColors.textMuted, size: 20),
+          suffixIcon: widget.obscure
+              ? GestureDetector(
+                  onTap: () => setState(() => _obscure = !_obscure),
+                  child: Icon(
+                    _obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    color: AppColors.textMuted, size: 20,
+                  ),
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 17),
         ),

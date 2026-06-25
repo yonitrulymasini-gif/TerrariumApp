@@ -11,8 +11,19 @@ dependencies:
   firebase_core: ^4.11.0
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   google_fonts: ^6.1.0
   flutter_svg: ^2.0.10+1
+  app_links: ^6.4.0
+  uuid: ^4.5.1
+  image_picker: ^1.1.2
+  url_launcher: ^6.3.1
+  shared_preferences: ^2.3.3
+  http: ^1.2.2
+  cloud_firestore: ^6.6.0
+  firebase_messaging: ^16.4.1
+  mobile_scanner: ^7.0.1
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^8.1.0
 

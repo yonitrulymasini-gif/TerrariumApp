@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import '../services/theme_service.dart';
+import '../services/app_nav.dart';
 import '../widgets/bottom_nav.dart';
 import 'home_screen.dart';
 import 'mesures_screen.dart';
@@ -15,41 +16,65 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _index = 0;
+  int get _index => AppNav.instance.tab;
 
-  static const _screens = [
-    HomeScreen(),
-    MesuresScreen(),
-    CommunauteScreen(),
-    ScenariosScreen(),
-    ProfilScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    ThemeService.instance.addListener(_onTheme);
+    AppNav.instance.addListener(_onTheme);
+  }
+
+  @override
+  void dispose() {
+    ThemeService.instance.removeListener(_onTheme);
+    AppNav.instance.removeListener(_onTheme);
+    super.dispose();
+  }
+
+  void _onTheme() => setState(() {});
 
   @override
   Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    // Non-const VOLONTAIRE : de nouvelles instances à chaque build pour que les
+    // écrans se reconstruisent quand le thème change (l'état est préservé par
+    // position dans l'IndexedStack). Ne pas remettre `const` ici.
+    // ignore: prefer_const_constructors
+    final screens = <Widget>[
+      // ignore: prefer_const_constructors
+      HomeScreen(),
+      // ignore: prefer_const_constructors
+      MesuresScreen(),
+      // ignore: prefer_const_constructors
+      CommunauteScreen(),
+      // ignore: prefer_const_constructors
+      ScenariosScreen(),
+      // ignore: prefer_const_constructors
+      ProfilScreen(),
+    ];
     return Scaffold(
       body: Stack(
         children: [
-          // Fond lumineux jungle commun à tous les écrans
-          Positioned.fill(child: ColoredBox(color: AppColors.bg)),
+          Positioned.fill(child: ColoredBox(color: c.bg)),
           Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
             gradient: RadialGradient(
               center: const Alignment(0, -0.9), radius: 1.1,
-              colors: [const Color(0xFF1F3D2B).withValues(alpha: 0.5), Colors.transparent],
+              colors: [c.radialTop.withValues(alpha: 0.5), Colors.transparent],
             ),
           ))),
           Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
             gradient: RadialGradient(
               center: const Alignment(0, 1.3), radius: 1.1,
-              colors: [const Color(0xFF162318).withValues(alpha: 0.4), Colors.transparent],
+              colors: [c.radialBottom.withValues(alpha: 0.4), Colors.transparent],
             ),
           ))),
-          IndexedStack(index: _index, children: _screens),
+          IndexedStack(index: _index, children: screens),
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: TerraBottomNav(
               currentIndex: _index,
-              onTap: (i) => setState(() => _index = i),
+              onTap: (i) => AppNav.instance.goToTab(i),
             ),
           ),
         ],
