@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../app_config.dart';
 
 class DeviceService extends ChangeNotifier {
   static final DeviceService _instance = DeviceService._();
@@ -16,6 +17,10 @@ class DeviceService extends ChangeNotifier {
 
   /// Appeler au démarrage (après login) pour streamer les devices du user
   void startListening() {
+    // En démo, on ne dépend pas de Firestore : la liste locale est gardée
+    // telle quelle (sinon le snapshot l'écraserait).
+    if (kDemoMode) return;
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
@@ -32,6 +37,15 @@ class DeviceService extends ChangeNotifier {
 
   /// Appelé après appairage réussi
   Future<void> addDevice(TerraDevice device) async {
+    // Ajout local immédiat : l'accueil voit l'appareil tout de suite, même si
+    // l'utilisateur est anonyme ou si l'écriture Firestore échoue.
+    if (!_devices.any((d) => d.serialId == device.serialId)) {
+      _devices = [..._devices, device];
+      notifyListeners();
+    }
+
+    if (kDemoMode) return; // pas d'écriture Firestore en démo
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
@@ -44,6 +58,11 @@ class DeviceService extends ChangeNotifier {
   }
 
   Future<void> removeDevice(String serialId) async {
+    _devices = _devices.where((d) => d.serialId != serialId).toList();
+    notifyListeners();
+
+    if (kDemoMode) return;
+
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 

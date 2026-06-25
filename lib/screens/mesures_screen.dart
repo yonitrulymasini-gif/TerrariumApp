@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
+import '../app_config.dart';
 import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
@@ -195,7 +196,7 @@ class _MesuresScreenState extends State<MesuresScreen> {
 
             const SizedBox(height: 8),
             Center(child: Text(
-                kTelemetryDemoMode
+                kDemoMode
                     ? 'Mode démo — données simulées (pas de boîtier réel)'
                     : 'Connecte ton ESP32 via MQTT pour activer les données en direct',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted, height: 1.6))),

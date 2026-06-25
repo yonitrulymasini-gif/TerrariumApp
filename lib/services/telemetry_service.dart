@@ -1,19 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-/// Mode démo : génère des mesures simulées qui varient dans le temps,
-/// sans ESP32 ni Firestore. Pratique pour tester l'app seule.
-/// Passer à false quand un vrai boîtier écrit dans Firestore.
-const bool kTelemetryDemoMode = true;
+import '../app_config.dart';
 
 /// Stream les dernières mesures d'un device depuis Firestore.
 /// L'ESP32 écrit dans : devices/{serialId}/telemetry (doc "latest")
+/// En démo ([kDemoMode]), les mesures sont simulées localement.
 class TelemetryService {
   static final _db = FirebaseFirestore.instance;
 
   static Stream<TelemetryData> stream(String serialId) {
-    if (kTelemetryDemoMode) return _demoStream();
+    if (kDemoMode) return _demoStream();
     return _db
         .collection('devices')
         .doc(serialId)
