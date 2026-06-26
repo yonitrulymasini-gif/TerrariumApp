@@ -30,10 +30,40 @@ class _MesuresScreenState extends State<MesuresScreen> {
 
   void _onDeviceChange() => setState(() {});
 
-  final _states = [false, false, false, false];
-  static const _relayNames = ['Lampe UV', 'Chauffage', 'Brumisateur', 'Ventilateur'];
-  static const _relaySubs = ['Prise 1', 'Prise 2', 'Prise 3', 'Prise 4'];
-  static const _relayIcons = [Icons.lightbulb_outline, Icons.local_fire_department_outlined, Icons.cloud_outlined, Icons.air_outlined];
+  Future<void> _renameOutlet(BuildContext context, int index, String current) async {
+    final ctrl = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: ThemeService.instance.colors.card,
+        title: Text('Renommer la prise', style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 17)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: ThemeService.instance.colors.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Nom de la prise',
+            hintStyle: TextStyle(color: ThemeService.instance.colors.textMuted),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: ThemeService.instance.colors.border)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ThemeService.instance.colors.primary)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Annuler', style: TextStyle(color: ThemeService.instance.colors.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ctrl.text),
+            child: Text('OK', style: TextStyle(color: ThemeService.instance.colors.primary, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result != null) DeviceService.instance.setOutletName(index, result);
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -131,15 +161,15 @@ class _MesuresScreenState extends State<MesuresScreen> {
               builder: (context, snap) {
                 final data = snap.data ?? TelemetryData.empty();
                 return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Température air', sensor: 'AM2320', value: data.tempDisplay, unit: '°C', large: true),
+                  _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Température air', value: data.tempDisplay, unit: '°C', large: true),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Sonde 1', sensor: 'DS18B20', value: data.tempWithOffset(-0.6), unit: '°C')),
+                    Expanded(child: _SensorCard(label: 'Point Froid', value: data.tempWithOffset(-0.6), unit: '°C')),
                     const SizedBox(width: 12),
-                    Expanded(child: _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Sonde 2', sensor: 'DS18B20', value: data.tempWithOffset(0.9), unit: '°C')),
+                    Expanded(child: _SensorCard(label: 'Point Chaud', value: data.tempWithOffset(0.9), unit: '°C')),
                   ]),
                   const SizedBox(height: 12),
-                  _SensorCard(icon: Icons.water_drop_outlined, iconColor: const Color(0xFF38BDF8), label: 'Humidité', sensor: 'AM2320', value: data.humidDisplay, unit: '%', large: true),
+                  _SensorCard(icon: Icons.water_drop_outlined, iconColor: const Color(0xFF38BDF8), label: 'Humidité', value: data.humidDisplay, unit: '%', large: true),
                 ]);
               },
             ),
@@ -148,49 +178,56 @@ class _MesuresScreenState extends State<MesuresScreen> {
             Text('CONTRÔLE DES PRISES', style: AppTextStyles.eyebrow),
             const SizedBox(height: 12),
 
-            for (int i = 0; i < 4; i++) ...[
+            for (int i = 0; i < DeviceService.instance.outlets.length; i++) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  decoration: glassCard(radius: 20),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  child: Row(children: [
-                    Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        color: _states[i] ? ThemeService.instance.colors.primary.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(_relayIcons[i], size: 20, color: _states[i] ? ThemeService.instance.colors.primary : ThemeService.instance.colors.textMuted),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(_relayNames[i], style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
-                      Text(_relaySubs[i], style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
-                    ])),
-                    GestureDetector(
-                      onTap: () => setState(() => _states[i] = !_states[i]),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 48, height: 28,
-                        decoration: BoxDecoration(
-                          color: _states[i] ? ThemeService.instance.colors.primary : AppColors.card,
-                          borderRadius: BorderRadius.circular(14),
+                child: Builder(builder: (context) {
+                  final outlet = DeviceService.instance.outlets[i];
+                  final isOn = outlet.on;
+                  return GestureDetector(
+                    onLongPress: () => _renameOutlet(context, i, outlet.name),
+                    child: Container(
+                      decoration: glassCard(radius: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(children: [
+                        Container(
+                          width: 44, height: 44,
+                          decoration: BoxDecoration(
+                            color: isOn ? ThemeService.instance.colors.primary.withValues(alpha: 0.20) : Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(Icons.power_outlined, size: 20, color: isOn ? ThemeService.instance.colors.primary : ThemeService.instance.colors.textMuted),
                         ),
-                        child: AnimatedAlign(
-                          duration: const Duration(milliseconds: 200),
-                          alignment: _states[i] ? Alignment.centerRight : Alignment.centerLeft,
-                          child: Container(
-                            width: 22, height: 22,
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            decoration: BoxDecoration(shape: BoxShape.circle, color: ThemeService.instance.colors.bg,
-                              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                        const SizedBox(width: 14),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(outlet.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
+                          Text('Appui long pour renommer', style: TextStyle(fontSize: 11, color: ThemeService.instance.colors.textMuted)),
+                        ])),
+                        GestureDetector(
+                          onTap: () => DeviceService.instance.setOutletState(i, !isOn),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 48, height: 28,
+                            decoration: BoxDecoration(
+                              color: isOn ? ThemeService.instance.colors.primary : AppColors.card,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: AnimatedAlign(
+                              duration: const Duration(milliseconds: 200),
+                              alignment: isOn ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                width: 22, height: 22,
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                decoration: BoxDecoration(shape: BoxShape.circle, color: ThemeService.instance.colors.bg,
+                                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ]),
                     ),
-                  ]),
-                ),
+                  );
+                }),
               ),
             ],
 
@@ -208,10 +245,14 @@ class _MesuresScreenState extends State<MesuresScreen> {
 }
 
 class _SensorCard extends StatelessWidget {
-  final IconData icon; final Color iconColor; final String label;
-  final String sensor; final String value; final String unit; final bool large;
-  const _SensorCard({required this.icon, required this.iconColor, required this.label,
-      required this.sensor, required this.value, required this.unit, this.large = false});
+  final IconData? icon;
+  final Color? iconColor;
+  final String label;
+  final String value;
+  final String unit;
+  final bool large;
+  const _SensorCard({this.icon, this.iconColor, required this.label,
+      required this.value, required this.unit, this.large = false});
 
   @override
   Widget build(BuildContext context) {
@@ -219,12 +260,11 @@ class _SensorCard extends StatelessWidget {
       decoration: glassCard(radius: 20),
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Row(children: [
+        Row(children: [
+          if (icon != null) ...[
             Icon(icon, size: 14, color: iconColor), const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textMuted)),
-          ]),
-          Text(sensor, style: TextStyle(fontSize: 10, color: ThemeService.instance.colors.textMuted)),
+          ],
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textMuted)),
         ]),
         const SizedBox(height: 10),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [

@@ -15,6 +15,26 @@ class DeviceService extends ChangeNotifier {
   List<TerraDevice> get devices => List.unmodifiable(_devices);
   bool get hasDevice => _devices.isNotEmpty;
 
+  // Prises partagées entre Accueil et Mesures
+  final _outlets = [
+    const OutletConfig(name: 'Prise 1'),
+    const OutletConfig(name: 'Prise 2'),
+    const OutletConfig(name: 'Prise 3'),
+    const OutletConfig(name: 'Prise 4'),
+  ];
+  List<OutletConfig> get outlets => List.unmodifiable(_outlets);
+
+  void setOutletState(int i, bool on) {
+    _outlets[i] = _outlets[i].copyWith(on: on);
+    notifyListeners();
+  }
+
+  void setOutletName(int i, String name) {
+    if (name.trim().isEmpty) return;
+    _outlets[i] = _outlets[i].copyWith(name: name.trim());
+    notifyListeners();
+  }
+
   /// Appeler au démarrage (après login) pour streamer les devices du user
   void startListening() {
     // En démo, on ne dépend pas de Firestore : la liste locale est gardée
@@ -74,6 +94,18 @@ class DeviceService extends ChangeNotifier {
         .delete();
   }
 }
+
+// ── Outlet (prise) ──────────────────────────────────────────────────────────
+
+class OutletConfig {
+  final String name;
+  final bool on;
+  const OutletConfig({required this.name, this.on = false});
+  OutletConfig copyWith({String? name, bool? on}) =>
+      OutletConfig(name: name ?? this.name, on: on ?? this.on);
+}
+
+// ── Device ──────────────────────────────────────────────────────────────────
 
 class TerraDevice {
   final String serialId;

@@ -144,8 +144,9 @@ class _StepDeviceId extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 40, 28, 40),
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(28, 40, 28, 40 + bottomInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           width: 60, height: 60,
@@ -189,7 +190,7 @@ class _StepDeviceId extends StatelessWidget {
             ]),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 32),
         _PairButton(label: 'Suivant', onTap: onNext),
       ]),
     );
@@ -209,8 +210,9 @@ class _StepWifi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 40, 28, 40),
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(28, 40, 28, 40 + bottomInset),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           width: 60, height: 60,
@@ -240,7 +242,7 @@ class _StepWifi extends StatelessWidget {
                 color: AppColors.textMuted, size: 18),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 32),
         _PairButton(label: 'Connecter', onTap: onNext),
       ]),
     );

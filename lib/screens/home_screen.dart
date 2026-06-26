@@ -5,6 +5,7 @@ import '../services/theme_service.dart';
 import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
+import '../services/app_nav.dart';
 import 'alerts_screen.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -31,12 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onDeviceChange() => setState(() {});
 
-  final _outlets = [
-    {'name': 'Prise 1', 'icon': Icons.power_outlined, 'state': false},
-    {'name': 'Prise 2', 'icon': Icons.power_outlined, 'state': false},
-    {'name': 'Prise 3', 'icon': Icons.power_outlined, 'state': false},
-    {'name': 'Prise 4', 'icon': Icons.power_outlined, 'state': false},
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -114,8 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('PRISES RAPIDES', style: AppTextStyles.eyebrow),
-                      Text('Tout voir',
-                          style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.primary, fontWeight: FontWeight.w500)),
+                      GestureDetector(
+                        onTap: () => AppNav.instance.goToTab(1),
+                        child: Text('Tout voir',
+                            style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.primary, fontWeight: FontWeight.w500)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -129,13 +127,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisSpacing: 12,
                       childAspectRatio: 2.1,
                     ),
-                    itemCount: _outlets.length,
+                    itemCount: DeviceService.instance.outlets.length,
                     itemBuilder: (_, i) {
-                      final o = _outlets[i];
-                      final isOn = o['state'] as bool;
-                      final icon = o['icon'] as IconData;
+                      final o = DeviceService.instance.outlets[i];
+                      final isOn = o.on;
                       return GestureDetector(
-                        onTap: () => setState(() => _outlets[i]['state'] = !isOn),
+                        onTap: () => DeviceService.instance.setOutletState(i, !isOn),
                         child: Container(
                           decoration: glassCard(radius: 20).copyWith(
                             border: isOn
@@ -153,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       : Colors.white.withValues(alpha: 0.06),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Icon(icon, size: 18,
+                                child: Icon(Icons.power_outlined, size: 18,
                                     color: isOn ? ThemeService.instance.colors.primary : ThemeService.instance.colors.textMuted),
                               ),
                               const SizedBox(width: 10),
@@ -162,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(o['name'] as String,
+                                    Text(o.name,
                                         style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textPrimary, fontWeight: FontWeight.w500)),
                                     const SizedBox(height: 2),
                                     Text(isOn ? 'Allumé' : 'Éteint',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 
@@ -10,7 +11,7 @@ class NotificationsSettingsScreen extends StatefulWidget {
 }
 
 class _NotificationsSettingsScreenState extends State<NotificationsSettingsScreen> {
-  bool _enabled = true;
+  bool _enabled = false;
 
   @override
   void initState() {
@@ -21,10 +22,20 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    setState(() => _enabled = p.getBool('notifications_enabled') ?? true);
+    setState(() => _enabled = p.getBool('notifications_enabled') ?? false);
   }
 
   Future<void> _toggle(bool v) async {
+    if (v) {
+      // Demande la permission iOS/Android à l'activation
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true, badge: true, sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        // Permission refusée → ne pas activer
+        return;
+      }
+    }
     setState(() => _enabled = v);
     (await SharedPreferences.getInstance()).setBool('notifications_enabled', v);
   }

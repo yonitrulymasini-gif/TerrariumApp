@@ -93,13 +93,13 @@ class TerraBottomNav extends StatelessWidget {
                               AnimatedDefaultTextStyle(
                                 duration: const Duration(milliseconds: 200),
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 9,
                                   fontWeight: active ? FontWeight.w700 : FontWeight.w400,
                                   color: active
                                       ? themeColor
                                       : Colors.white.withValues(alpha: 0.55),
                                 ),
-                                child: Text(_items[i].label),
+                                child: Text(_items[i].label, overflow: TextOverflow.ellipsis, maxLines: 1),
                               ),
                             ]),
                           ),
