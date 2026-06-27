@@ -22,10 +22,13 @@ class PtzService {
   Future<bool> connectFromRtsp(String rtspUrl,
       {List<int> onvifPorts = const [8000, 80, 2020, 8899, 8080]}) async {
     final uri = Uri.parse(rtspUrl);
-    final userInfo = uri.userInfo; // déjà décodé par Uri (admin:motdepasse)
+    // ⚠️ Uri.userInfo n'est PAS décodé : il faut décoder soi-même les
+    // caractères encodés du mot de passe (ex. %23 → #, %24 → $), sinon
+    // l'authentification ONVIF échoue.
+    final userInfo = uri.userInfo;
     final sep = userInfo.indexOf(':');
-    final username = sep >= 0 ? userInfo.substring(0, sep) : 'admin';
-    final password = sep >= 0 ? userInfo.substring(sep + 1) : '';
+    final username = Uri.decodeComponent(sep >= 0 ? userInfo.substring(0, sep) : 'admin');
+    final password = Uri.decodeComponent(sep >= 0 ? userInfo.substring(sep + 1) : '');
     final ip = uri.host;
 
     for (final port in onvifPorts) {
