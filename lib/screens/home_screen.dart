@@ -7,10 +7,13 @@ import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
+import 'package:gal/gal.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../services/app_nav.dart';
 import '../services/camera_service.dart';
+import '../services/ptz_service.dart';
 import 'alerts_screen.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -355,7 +358,7 @@ class _CameraCard extends StatefulWidget {
   State<_CameraCard> createState() => _CameraCardState();
 }
 
-class _CameraCardState extends State<_CameraCard> {
+class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   Player? _player;
   VideoController? _controller;
   String? _activeUrl;
@@ -367,12 +370,14 @@ class _CameraCardState extends State<_CameraCard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     CameraService.instance.addListener(_onCameraChange);
     _initPlayer(CameraService.instance.rtspUrl);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     CameraService.instance.removeListener(_onCameraChange);
     _errorSub?.cancel();
     _bufferingSub?.cancel();
@@ -380,9 +385,30 @@ class _CameraCardState extends State<_CameraCard> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Au retour dans l'app, le flux RTSP est tombé → on recharge.
+    if (state == AppLifecycleState.resumed) _reload();
+  }
+
   void _onCameraChange() {
     final url = CameraService.instance.rtspUrl;
     if (url != _activeUrl) _initPlayer(url);
+  }
+
+  /// Recharge le flux sur le MÊME lecteur (garde le controller valide pour le
+  /// plein écran). Recrée le lecteur seulement s'il n'existe pas encore.
+  Future<void> _reload() async {
+    final player = _player;
+    final url = _activeUrl;
+    if (url == null || url.isEmpty) return;
+    if (player == null) { await _initPlayer(url); return; }
+    if (mounted) setState(() => _error = null);
+    try {
+      await player.open(Media(url));
+    } catch (_) {
+      await _initPlayer(url);
+    }
   }
 
   Future<void> _initPlayer(String? url) async {
@@ -425,7 +451,16 @@ class _CameraCardState extends State<_CameraCard> {
     await player.open(Media(url));
   }
 
-  void _retry() => _initPlayer(_activeUrl);
+  void _retry() => _reload();
+
+  Widget _miniBtn(IconData icon, VoidCallback onTap, {double size = 20}) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
+      child: Icon(icon, color: Colors.white, size: size),
+    ),
+  );
 
   Future<void> _showUrlDialog() async {
     final ctrl = TextEditingController(text: CameraService.instance.rtspUrl ?? '');
@@ -503,12 +538,70 @@ class _CameraCardState extends State<_CameraCard> {
     ]);
   }
 
+  void _openFullscreen() {
+    if (_controller == null) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _CameraFullscreenPage(controller: _controller!, onCapture: _capture, onPtz: _ptzMove, onRefresh: _reload),
+      fullscreenDialog: true,
+    ));
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: ThemeService.instance.colors.card,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  Future<void> _capture() async {
+    final player = _player;
+    if (player == null) return;
+    try {
+      final bytes = await player.screenshot();
+      if (bytes == null) { _toast('Capture impossible'); return; }
+      await Gal.putImageBytes(bytes, name: 'terra_${DateTime.now().millisecondsSinceEpoch}');
+      _toast('Capture enregistrée dans Photos 📷');
+    } on GalException {
+      _toast('Autorise l\'accès aux Photos dans Réglages');
+    } catch (_) {
+      _toast('Capture impossible');
+    }
+  }
+
+  bool _ptzBusy = false;
+  Future<void> _ptzMove(String dir) async {
+    if (_ptzBusy) return;
+    _ptzBusy = true;
+    try {
+      final url = CameraService.instance.rtspUrl;
+      if (url == null) return;
+      if (!PtzService.instance.isReady) {
+        final ok = await PtzService.instance.connectFromRtsp(url);
+        if (!ok) { _toast('Orientation indisponible sur cette caméra'); return; }
+      }
+      switch (dir) {
+        case 'up': await PtzService.instance.up(); break;
+        case 'down': await PtzService.instance.down(); break;
+        case 'left': await PtzService.instance.left(); break;
+        case 'right': await PtzService.instance.right(); break;
+      }
+    } catch (_) {
+      _toast('Mouvement impossible');
+    } finally {
+      _ptzBusy = false;
+    }
+  }
+
   Widget _buildStream(dynamic c) {
     return Stack(children: [
+      // BoxFit.cover : remplit toute la carte sans bandes noires (recadre un peu).
       Positioned.fill(
         child: ColoredBox(
           color: Colors.black,
-          child: Video(controller: _controller!, controls: NoVideoControls),
+          child: Video(controller: _controller!, controls: NoVideoControls, fit: BoxFit.cover),
         ),
       ),
 
@@ -557,6 +650,30 @@ class _CameraCardState extends State<_CameraCard> {
           ]),
         ),
       ),
+
+      // Refresh (toujours visible) + capture (si flux OK), haut droite
+      Positioned(
+        top: 10, right: 10,
+        child: Row(children: [
+          _miniBtn(Icons.refresh, _reload),
+          if (_error == null) ...[
+            const SizedBox(width: 8),
+            _miniBtn(Icons.camera_alt_outlined, _capture),
+          ],
+        ]),
+      ),
+
+      // D-pad orientation (bas gauche)
+      if (_error == null) Positioned(
+        bottom: 10, left: 10,
+        child: _PtzPad(onMove: _ptzMove),
+      ),
+
+      // Bouton plein écran (bas droite)
+      if (_error == null) Positioned(
+        bottom: 10, right: 10,
+        child: _miniBtn(Icons.fullscreen, _openFullscreen, size: 22),
+      ),
     ]);
   }
 
@@ -596,6 +713,128 @@ class _GridPainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(_GridPainter old) => old.color != color;
+}
+
+// ── D-pad d'orientation PTZ ──────────────────────────────────────────────────
+
+class _PtzPad extends StatelessWidget {
+  final Future<void> Function(String dir) onMove;
+  final double size;
+  const _PtzPad({required this.onMove, this.size = 96});
+
+  @override
+  Widget build(BuildContext context) {
+    final btn = size / 3;
+    Widget arrow(String dir, IconData icon, Alignment align) => Align(
+      alignment: align,
+      child: GestureDetector(
+        onTap: () => onMove(dir),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(width: btn, height: btn, child: Icon(icon, color: Colors.white, size: 20)),
+      ),
+    );
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), shape: BoxShape.circle),
+      child: Stack(children: [
+        arrow('up', Icons.keyboard_arrow_up, Alignment.topCenter),
+        arrow('down', Icons.keyboard_arrow_down, Alignment.bottomCenter),
+        arrow('left', Icons.keyboard_arrow_left, Alignment.centerLeft),
+        arrow('right', Icons.keyboard_arrow_right, Alignment.centerRight),
+        Align(alignment: Alignment.center, child: Container(
+          width: btn * 0.5, height: btn * 0.5,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.25)),
+        )),
+      ]),
+    );
+  }
+}
+
+// ── Caméra plein écran ──────────────────────────────────────────────────────
+
+class _CameraFullscreenPage extends StatefulWidget {
+  final VideoController controller;
+  final Future<void> Function() onCapture;
+  final Future<void> Function(String dir) onPtz;
+  final Future<void> Function() onRefresh;
+  const _CameraFullscreenPage({required this.controller, required this.onCapture, required this.onPtz, required this.onRefresh});
+
+  @override
+  State<_CameraFullscreenPage> createState() => _CameraFullscreenPageState();
+}
+
+class _CameraFullscreenPageState extends State<_CameraFullscreenPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Autorise le paysage + masque les barres système pour un vrai plein écran.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  @override
+  void dispose() {
+    // Restaure le verrouillage portrait de l'app.
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(children: [
+        Positioned.fill(
+          child: Video(controller: widget.controller, controls: NoVideoControls, fit: BoxFit.contain),
+        ),
+        // Fermer
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Icon(Icons.close, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+        ),
+        // D-pad orientation (bas gauche)
+        Positioned(bottom: 24, left: 24, child: SafeArea(child: _PtzPad(onMove: widget.onPtz, size: 120))),
+        // Refresh (haut droite)
+        SafeArea(child: Align(
+          alignment: Alignment.topRight,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: GestureDetector(
+              onTap: widget.onRefresh,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: const Icon(Icons.refresh, color: Colors.white, size: 24),
+              ),
+            ),
+          ),
+        )),
+        // Capture (bas droite)
+        Positioned(bottom: 24, right: 24, child: SafeArea(child: GestureDetector(
+          onTap: widget.onCapture,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+            child: const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 26),
+          ),
+        ))),
+      ]),
+    );
+  }
 }
 
 // ── Empty state (aucun device associé) ──────────────────────────────────────

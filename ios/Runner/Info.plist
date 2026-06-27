@@ -6,6 +6,10 @@
 	<string>Terra utilise l'appareil photo pour scanner le QR code de ton boîtier et photographier tes terrariums.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Terra accède à tes photos pour partager des images de tes terrariums dans la communauté.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Terra enregistre les captures de ta caméra dans ta photothèque.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Terra accède à ton réseau local pour afficher en direct le flux vidéo de ta caméra de terrarium.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
