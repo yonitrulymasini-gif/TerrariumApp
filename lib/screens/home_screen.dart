@@ -366,6 +366,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   bool _buffering = false;
   StreamSubscription? _errorSub;
   StreamSubscription? _bufferingSub;
+  Timer? _bufferTimer;
 
   @override
   void initState() {
@@ -381,6 +382,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
     CameraService.instance.removeListener(_onCameraChange);
     _errorSub?.cancel();
     _bufferingSub?.cancel();
+    _bufferTimer?.cancel();
     _player?.dispose();
     super.dispose();
   }
@@ -414,6 +416,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   Future<void> _initPlayer(String? url) async {
     await _errorSub?.cancel();
     await _bufferingSub?.cancel();
+    _bufferTimer?.cancel();
     await _player?.dispose();
     _player = null;
     _controller = null;
@@ -444,7 +447,18 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
       if (mounted) setState(() => _error = e);
     });
     _bufferingSub = player.stream.buffering.listen((b) {
-      if (mounted) setState(() => _buffering = b);
+      if (!mounted) return;
+      setState(() => _buffering = b);
+      _bufferTimer?.cancel();
+      if (b) {
+        // Si ça "connecte" toujours après 12 s → erreur actionnable.
+        _bufferTimer = Timer(const Duration(seconds: 12), () {
+          if (mounted && _buffering && _error == null) {
+            setState(() => _error =
+                'Délai dépassé. Vérifie qu\'aucune autre app (VLC…) ne lit le flux, ou redémarre la caméra.');
+          }
+        });
+      }
     });
 
     if (mounted) setState(() { _player = player; _controller = controller; });
@@ -611,15 +625,10 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   Widget _buildStream(dynamic c) {
     return Stack(children: [
       // BoxFit.cover : remplit toute la carte sans bandes noires (recadre un peu).
-      // _PtzSurface : glisser sur la vidéo oriente la caméra.
       Positioned.fill(
-        child: _PtzSurface(
-          onStart: _ptzStart,
-          onStop: _ptzStop,
-          child: ColoredBox(
-            color: Colors.black,
-            child: Video(controller: _controller!, controls: NoVideoControls, fit: BoxFit.cover),
-          ),
+        child: ColoredBox(
+          color: Colors.black,
+          child: Video(controller: _controller!, controls: NoVideoControls, fit: BoxFit.cover),
         ),
       ),
 
@@ -755,46 +764,6 @@ class _PtzPad extends StatelessWidget {
   }
 }
 
-// ── Surface tactile : glisser pour orienter (joystick) ───────────────────────
-
-class _PtzSurface extends StatefulWidget {
-  final Widget child;
-  final Future<void> Function(double x, double y) onStart;
-  final Future<void> Function() onStop;
-  const _PtzSurface({required this.child, required this.onStart, required this.onStop});
-
-  @override
-  State<_PtzSurface> createState() => _PtzSurfaceState();
-}
-
-class _PtzSurfaceState extends State<_PtzSurface> {
-  double _dx = 0, _dy = 0;
-  DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
-
-  static const _maxSpeed = 0.8;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (_) { _dx = 0; _dy = 0; },
-      onPanUpdate: (d) {
-        _dx += d.delta.dx;
-        _dy += d.delta.dy;
-        final now = DateTime.now();
-        if (now.difference(_last).inMilliseconds < 250) return; // throttle
-        _last = now;
-        final vx = (_dx / 110).clamp(-_maxSpeed, _maxSpeed);
-        final vy = (-_dy / 110).clamp(-_maxSpeed, _maxSpeed); // écran inversé
-        widget.onStart(vx, vy);
-      },
-      onPanEnd: (_) { _dx = 0; _dy = 0; widget.onStop(); },
-      onPanCancel: () { _dx = 0; _dy = 0; widget.onStop(); },
-      child: widget.child,
-    );
-  }
-}
-
 // ── Caméra plein écran ──────────────────────────────────────────────────────
 
 class _CameraFullscreenPage extends StatefulWidget {
@@ -837,11 +806,7 @@ class _CameraFullscreenPageState extends State<_CameraFullscreenPage> {
       backgroundColor: Colors.black,
       body: Stack(children: [
         Positioned.fill(
-          child: _PtzSurface(
-            onStart: widget.onPtzStart,
-            onStop: widget.onPtzStop,
-            child: Video(controller: widget.controller, controls: NoVideoControls, fit: BoxFit.contain),
-          ),
+          child: Video(controller: widget.controller, controls: NoVideoControls, fit: BoxFit.contain),
         ),
         // Fermer
         SafeArea(
