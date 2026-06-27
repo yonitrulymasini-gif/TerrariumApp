@@ -1,4 +1,5 @@
 import 'package:easy_onvif/onvif.dart';
+import 'package:easy_onvif/shared.dart';
 
 /// Pilotage de l'orientation (PTZ) d'une caméra ONVIF.
 ///
@@ -69,10 +70,15 @@ class PtzService {
     }
   }
 
-  Future<bool> up([double s = 0.08])    => _do(() => _onvif!.ptz.moveUp(_profileToken!, s));
-  Future<bool> down([double s = 0.08])  => _do(() => _onvif!.ptz.moveDown(_profileToken!, -s));
-  Future<bool> left([double s = 0.08])  => _do(() => _onvif!.ptz.moveLeft(_profileToken!, -s));
-  Future<bool> right([double s = 0.08]) => _do(() => _onvif!.ptz.moveRight(_profileToken!, s));
+  /// Démarre un mouvement continu (x = pan : - gauche / + droite,
+  /// y = tilt : - bas / + haut). Vitesses dans [-1, 1].
+  Future<bool> startMove(double x, double y) => _do(() => _onvif!.ptz.continuousMove(
+        _profileToken!,
+        velocity: PtzSpeed(panTilt: Vector2D(x: x, y: y), zoom: Vector1D(x: 0)),
+      ));
+
+  /// Arrête le mouvement en cours.
+  Future<bool> stopMove() => _do(() => _onvif!.ptz.stop(_profileToken!));
 
   String _short(Object e) {
     final s = e.toString();

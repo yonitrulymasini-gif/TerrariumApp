@@ -536,7 +536,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
 
   Widget _controlBar(dynamic c) {
     return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      _PtzPad(onMove: _ptzMove, size: 78, iconColor: c.textPrimary, bgColor: c.card),
+      _PtzPad(onStart: _ptzStart, onStop: _ptzStop, size: 78, iconColor: c.textPrimary, bgColor: c.card),
       Row(children: [
         _ctrlBtn(Icons.refresh, _reload, c),
         const SizedBox(width: 10),
@@ -559,7 +559,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   void _openFullscreen() {
     if (_controller == null) return;
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _CameraFullscreenPage(controller: _controller!, onCapture: _capture, onPtz: _ptzMove, onRefresh: _reload),
+      builder: (_) => _CameraFullscreenPage(controller: _controller!, onCapture: _capture, onPtzStart: _ptzStart, onPtzStop: _ptzStop, onRefresh: _reload),
       fullscreenDialog: true,
     ));
   }
@@ -589,37 +589,37 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
     }
   }
 
-  bool _ptzBusy = false;
-  Future<void> _ptzMove(String dir) async {
-    if (_ptzBusy) return;
-    _ptzBusy = true;
-    try {
-      final url = CameraService.instance.rtspUrl;
-      if (url == null) return;
-      if (!PtzService.instance.isReady) {
-        final ok = await PtzService.instance.connectFromRtsp(url);
-        if (!ok) { _toast('PTZ : ${PtzService.instance.lastError ?? "connexion impossible"}'); return; }
-      }
-      bool moved;
-      switch (dir) {
-        case 'up': moved = await PtzService.instance.up(); break;
-        case 'down': moved = await PtzService.instance.down(); break;
-        case 'left': moved = await PtzService.instance.left(); break;
-        default: moved = await PtzService.instance.right(); break;
-      }
-      if (!moved) _toast('PTZ : ${PtzService.instance.lastError ?? "mouvement refusé"}');
-    } finally {
-      _ptzBusy = false;
+  bool _ptzConnecting = false;
+  Future<void> _ptzStart(double x, double y) async {
+    final url = CameraService.instance.rtspUrl;
+    if (url == null) return;
+    if (!PtzService.instance.isReady) {
+      if (_ptzConnecting) return;
+      _ptzConnecting = true;
+      final ok = await PtzService.instance.connectFromRtsp(url);
+      _ptzConnecting = false;
+      if (!ok) { _toast('PTZ : ${PtzService.instance.lastError ?? "connexion impossible"}'); return; }
     }
+    final moved = await PtzService.instance.startMove(x, y);
+    if (!moved) _toast('PTZ : ${PtzService.instance.lastError ?? "mouvement refusé"}');
+  }
+
+  Future<void> _ptzStop() async {
+    if (PtzService.instance.isReady) await PtzService.instance.stopMove();
   }
 
   Widget _buildStream(dynamic c) {
     return Stack(children: [
       // BoxFit.cover : remplit toute la carte sans bandes noires (recadre un peu).
+      // _PtzSurface : glisser sur la vidéo oriente la caméra.
       Positioned.fill(
-        child: ColoredBox(
-          color: Colors.black,
-          child: Video(controller: _controller!, controls: NoVideoControls, fit: BoxFit.cover),
+        child: _PtzSurface(
+          onStart: _ptzStart,
+          onStop: _ptzStop,
+          child: ColoredBox(
+            color: Colors.black,
+            child: Video(controller: _controller!, controls: NoVideoControls, fit: BoxFit.cover),
+          ),
         ),
       ),
 
@@ -712,20 +712,25 @@ class _GridPainter extends CustomPainter {
 // ── D-pad d'orientation PTZ ──────────────────────────────────────────────────
 
 class _PtzPad extends StatelessWidget {
-  final Future<void> Function(String dir) onMove;
+  final Future<void> Function(double x, double y) onStart;
+  final Future<void> Function() onStop;
   final double size;
   final Color iconColor;
   final Color bgColor;
-  const _PtzPad({required this.onMove, this.size = 96,
+  const _PtzPad({required this.onStart, required this.onStop, this.size = 96,
       this.iconColor = Colors.white, this.bgColor = const Color(0x73000000)});
 
   @override
   Widget build(BuildContext context) {
     final btn = size / 3;
-    Widget arrow(String dir, IconData icon, Alignment align) => Align(
+    const speed = 0.6; // vitesse du mouvement maintenu
+    // Appui maintenu : démarre le mouvement, le relâche l'arrête.
+    Widget arrow(double x, double y, IconData icon, Alignment align) => Align(
       alignment: align,
-      child: GestureDetector(
-        onTap: () => onMove(dir),
+      child: Listener(
+        onPointerDown: (_) => onStart(x, y),
+        onPointerUp: (_) => onStop(),
+        onPointerCancel: (_) => onStop(),
         behavior: HitTestBehavior.opaque,
         child: SizedBox(width: btn, height: btn, child: Icon(icon, color: iconColor, size: 20)),
       ),
@@ -737,10 +742,10 @@ class _PtzPad extends StatelessWidget {
         border: Border.all(color: iconColor.withValues(alpha: 0.18)),
       ),
       child: Stack(children: [
-        arrow('up', Icons.keyboard_arrow_up, Alignment.topCenter),
-        arrow('down', Icons.keyboard_arrow_down, Alignment.bottomCenter),
-        arrow('left', Icons.keyboard_arrow_left, Alignment.centerLeft),
-        arrow('right', Icons.keyboard_arrow_right, Alignment.centerRight),
+        arrow(0, speed, Icons.keyboard_arrow_up, Alignment.topCenter),
+        arrow(0, -speed, Icons.keyboard_arrow_down, Alignment.bottomCenter),
+        arrow(-speed, 0, Icons.keyboard_arrow_left, Alignment.centerLeft),
+        arrow(speed, 0, Icons.keyboard_arrow_right, Alignment.centerRight),
         Align(alignment: Alignment.center, child: Container(
           width: btn * 0.5, height: btn * 0.5,
           decoration: BoxDecoration(shape: BoxShape.circle, color: iconColor.withValues(alpha: 0.25)),
@@ -750,14 +755,56 @@ class _PtzPad extends StatelessWidget {
   }
 }
 
+// ── Surface tactile : glisser pour orienter (joystick) ───────────────────────
+
+class _PtzSurface extends StatefulWidget {
+  final Widget child;
+  final Future<void> Function(double x, double y) onStart;
+  final Future<void> Function() onStop;
+  const _PtzSurface({required this.child, required this.onStart, required this.onStop});
+
+  @override
+  State<_PtzSurface> createState() => _PtzSurfaceState();
+}
+
+class _PtzSurfaceState extends State<_PtzSurface> {
+  double _dx = 0, _dy = 0;
+  DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static const _maxSpeed = 0.8;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (_) { _dx = 0; _dy = 0; },
+      onPanUpdate: (d) {
+        _dx += d.delta.dx;
+        _dy += d.delta.dy;
+        final now = DateTime.now();
+        if (now.difference(_last).inMilliseconds < 250) return; // throttle
+        _last = now;
+        final vx = (_dx / 110).clamp(-_maxSpeed, _maxSpeed);
+        final vy = (-_dy / 110).clamp(-_maxSpeed, _maxSpeed); // écran inversé
+        widget.onStart(vx, vy);
+      },
+      onPanEnd: (_) { _dx = 0; _dy = 0; widget.onStop(); },
+      onPanCancel: () { _dx = 0; _dy = 0; widget.onStop(); },
+      child: widget.child,
+    );
+  }
+}
+
 // ── Caméra plein écran ──────────────────────────────────────────────────────
 
 class _CameraFullscreenPage extends StatefulWidget {
   final VideoController controller;
   final Future<void> Function() onCapture;
-  final Future<void> Function(String dir) onPtz;
+  final Future<void> Function(double x, double y) onPtzStart;
+  final Future<void> Function() onPtzStop;
   final Future<void> Function() onRefresh;
-  const _CameraFullscreenPage({required this.controller, required this.onCapture, required this.onPtz, required this.onRefresh});
+  const _CameraFullscreenPage({required this.controller, required this.onCapture,
+      required this.onPtzStart, required this.onPtzStop, required this.onRefresh});
 
   @override
   State<_CameraFullscreenPage> createState() => _CameraFullscreenPageState();
@@ -790,7 +837,11 @@ class _CameraFullscreenPageState extends State<_CameraFullscreenPage> {
       backgroundColor: Colors.black,
       body: Stack(children: [
         Positioned.fill(
-          child: Video(controller: widget.controller, controls: NoVideoControls, fit: BoxFit.contain),
+          child: _PtzSurface(
+            onStart: widget.onPtzStart,
+            onStop: widget.onPtzStop,
+            child: Video(controller: widget.controller, controls: NoVideoControls, fit: BoxFit.contain),
+          ),
         ),
         // Fermer
         SafeArea(
@@ -807,7 +858,7 @@ class _CameraFullscreenPageState extends State<_CameraFullscreenPage> {
           ),
         ),
         // D-pad orientation (bas gauche)
-        Positioned(bottom: 24, left: 24, child: SafeArea(child: _PtzPad(onMove: widget.onPtz, size: 120))),
+        Positioned(bottom: 24, left: 24, child: SafeArea(child: _PtzPad(onStart: widget.onPtzStart, onStop: widget.onPtzStop, size: 120))),
         // Refresh (haut droite)
         SafeArea(child: Align(
           alignment: Alignment.topRight,
