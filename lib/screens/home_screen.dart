@@ -5,7 +5,12 @@ import '../services/theme_service.dart';
 import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import '../services/app_nav.dart';
+import '../services/camera_service.dart';
 import 'alerts_screen.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
@@ -102,6 +107,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   // Carte terrarium
                   _TerrariumCard(device: DeviceService.instance.devices.first),
+                  const SizedBox(height: 20),
+
+                  // Caméra
+                  _CameraCard(),
                   const SizedBox(height: 20),
 
                   // Prises rapides
@@ -335,6 +344,258 @@ class _MetricCell extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Carte caméra ────────────────────────────────────────────────────────────
+
+class _CameraCard extends StatefulWidget {
+  _CameraCard();
+
+  @override
+  State<_CameraCard> createState() => _CameraCardState();
+}
+
+class _CameraCardState extends State<_CameraCard> {
+  Player? _player;
+  VideoController? _controller;
+  String? _activeUrl;
+  String? _error;
+  bool _buffering = false;
+  StreamSubscription? _errorSub;
+  StreamSubscription? _bufferingSub;
+
+  @override
+  void initState() {
+    super.initState();
+    CameraService.instance.addListener(_onCameraChange);
+    _initPlayer(CameraService.instance.rtspUrl);
+  }
+
+  @override
+  void dispose() {
+    CameraService.instance.removeListener(_onCameraChange);
+    _errorSub?.cancel();
+    _bufferingSub?.cancel();
+    _player?.dispose();
+    super.dispose();
+  }
+
+  void _onCameraChange() {
+    final url = CameraService.instance.rtspUrl;
+    if (url != _activeUrl) _initPlayer(url);
+  }
+
+  Future<void> _initPlayer(String? url) async {
+    await _errorSub?.cancel();
+    await _bufferingSub?.cancel();
+    await _player?.dispose();
+    _player = null;
+    _controller = null;
+    _error = null;
+    _buffering = false;
+    _activeUrl = url;
+
+    if (url == null || url.isEmpty) {
+      if (mounted) setState(() {});
+      return;
+    }
+
+    final player = Player();
+    final controller = VideoController(player);
+
+    // Force le RTSP en TCP (natif uniquement) : l'UDP passe mal sur le WiFi
+    // → écran noir. Sur le web, media_kit n'expose pas setProperty et le RTSP
+    // n'est pas supporté par le navigateur de toute façon — on saute.
+    if (!kIsWeb) {
+      try {
+        final platform = player.platform as dynamic;
+        await platform.setProperty('rtsp-transport', 'tcp');
+        await platform.setProperty('network-timeout', '15');
+      } catch (_) {}
+    }
+
+    _errorSub = player.stream.error.listen((e) {
+      if (mounted) setState(() => _error = e);
+    });
+    _bufferingSub = player.stream.buffering.listen((b) {
+      if (mounted) setState(() => _buffering = b);
+    });
+
+    if (mounted) setState(() { _player = player; _controller = controller; });
+    await player.open(Media(url));
+  }
+
+  void _retry() => _initPlayer(_activeUrl);
+
+  Future<void> _showUrlDialog() async {
+    final ctrl = TextEditingController(text: CameraService.instance.rtspUrl ?? '');
+    final c = ThemeService.instance.colors;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: c.card,
+        title: Text('URL RTSP de la caméra', style: TextStyle(color: c.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Exemple :', style: TextStyle(fontSize: 12, color: c.textMuted)),
+          const SizedBox(height: 2),
+          Text('rtsp://192.168.1.100:554/stream', style: TextStyle(fontSize: 11, color: c.textMuted, fontFamily: 'monospace')),
+          const SizedBox(height: 14),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            style: TextStyle(color: c.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'rtsp://...',
+              hintStyle: TextStyle(color: c.textMuted),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.border)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.primary)),
+            ),
+          ),
+        ]),
+        actions: [
+          if (CameraService.instance.hasCamera)
+            TextButton(
+              onPressed: () { CameraService.instance.clear(); Navigator.pop(context); },
+              child: Text('Supprimer', style: TextStyle(color: AppColors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Annuler', style: TextStyle(color: c.textMuted)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, ctrl.text),
+            child: Text('OK', style: TextStyle(color: c.primary, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result != null) await CameraService.instance.setUrl(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    final hasStream = _controller != null;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text('CAMÉRA', style: AppTextStyles.eyebrow),
+        GestureDetector(
+          onTap: _showUrlDialog,
+          child: Text(
+            hasStream ? 'Changer' : 'Configurer',
+            style: TextStyle(fontSize: 13, color: c.primary, fontWeight: FontWeight.w500),
+          ),
+        ),
+      ]),
+      const SizedBox(height: 12),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          width: double.infinity,
+          height: 210,
+          decoration: glassCard(radius: 20),
+          child: hasStream ? _buildStream(c) : _buildPlaceholder(c),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildStream(dynamic c) {
+    return Stack(children: [
+      Positioned.fill(
+        child: ColoredBox(
+          color: Colors.black,
+          child: Video(controller: _controller!, controls: NoVideoControls),
+        ),
+      ),
+
+      // Spinner de connexion
+      if (_buffering && _error == null)
+        Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          CircularProgressIndicator(color: c.primary, strokeWidth: 2.5),
+          const SizedBox(height: 12),
+          const Text('Connexion à la caméra…', style: TextStyle(fontSize: 12, color: Colors.white60)),
+        ])),
+
+      // Overlay d'erreur
+      if (_error != null)
+        Positioned.fill(child: Container(
+          color: Colors.black.withValues(alpha: 0.9),
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.videocam_off_outlined, color: AppColors.red, size: 32),
+            const SizedBox(height: 10),
+            const Text('Flux indisponible', style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(_error!, textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Colors.white54)),
+            const SizedBox(height: 14),
+            GestureDetector(
+              onTap: _retry,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                decoration: BoxDecoration(color: c.primary, borderRadius: BorderRadius.circular(20)),
+                child: Text('Réessayer', style: TextStyle(fontSize: 13, color: c.bg, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ]),
+        )),
+
+      // Badge LIVE (caché si erreur)
+      if (_error == null) Positioned(
+        top: 10, left: 10,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 6, height: 6, decoration: BoxDecoration(shape: BoxShape.circle, color: c.primary)),
+            const SizedBox(width: 5),
+            const Text('LIVE', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 1)),
+          ]),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _buildPlaceholder(dynamic c) {
+    return Stack(children: [
+      Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.85))),
+      Positioned.fill(child: CustomPaint(painter: _GridPainter(color: Colors.white.withValues(alpha: 0.05)))),
+      Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: c.primary.withValues(alpha: 0.15),
+            border: Border.all(color: c.primary.withValues(alpha: 0.35), width: 1.5),
+          ),
+          child: Icon(Icons.videocam_outlined, color: c.primary, size: 26),
+        ),
+        const SizedBox(height: 10),
+        const Text('Aucune caméra configurée', style: TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
+        const Text('Appuie sur "Configurer" pour ajouter l\'URL RTSP', style: TextStyle(fontSize: 11, color: Colors.white38)),
+      ])),
+    ]);
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  final Color color;
+  _GridPainter({required this.color});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()..color = color..strokeWidth = 0.5;
+    for (int i = 1; i < 3; i++) {
+      canvas.drawLine(Offset(0, size.height * i / 3), Offset(size.width, size.height * i / 3), p);
+      canvas.drawLine(Offset(size.width * i / 3, 0), Offset(size.width * i / 3, size.height), p);
+    }
+  }
+  @override
+  bool shouldRepaint(_GridPainter old) => old.color != color;
 }
 
 // ── Empty state (aucun device associé) ──────────────────────────────────────
