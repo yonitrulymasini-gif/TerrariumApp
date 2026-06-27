@@ -453,15 +453,6 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
 
   void _retry() => _reload();
 
-  Widget _miniBtn(IconData icon, VoidCallback onTap, {double size = 20}) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.all(7),
-      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-      child: Icon(icon, color: Colors.white, size: size),
-    ),
-  );
-
   Future<void> _showUrlDialog() async {
     final ctrl = TextEditingController(text: CameraService.instance.rtspUrl ?? '');
     final c = ThemeService.instance.colors;
@@ -535,8 +526,35 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
           child: hasStream ? _buildStream(c) : _buildPlaceholder(c),
         ),
       ),
+      // Barre de contrôle SOUS la vidéo (vue dégagée).
+      if (hasStream && _error == null) ...[
+        const SizedBox(height: 12),
+        _controlBar(c),
+      ],
     ]);
   }
+
+  Widget _controlBar(dynamic c) {
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      _PtzPad(onMove: _ptzMove, size: 78, iconColor: c.textPrimary, bgColor: c.card),
+      Row(children: [
+        _ctrlBtn(Icons.refresh, _reload, c),
+        const SizedBox(width: 10),
+        _ctrlBtn(Icons.camera_alt_outlined, _capture, c),
+        const SizedBox(width: 10),
+        _ctrlBtn(Icons.fullscreen, _openFullscreen, c),
+      ]),
+    ]);
+  }
+
+  Widget _ctrlBtn(IconData icon, VoidCallback onTap, dynamic c) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 46, height: 46,
+      decoration: BoxDecoration(color: c.card, shape: BoxShape.circle, border: Border.all(color: c.border)),
+      child: Icon(icon, color: c.textPrimary, size: 21),
+    ),
+  );
 
   void _openFullscreen() {
     if (_controller == null) return;
@@ -580,16 +598,16 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
       if (url == null) return;
       if (!PtzService.instance.isReady) {
         final ok = await PtzService.instance.connectFromRtsp(url);
-        if (!ok) { _toast('Orientation indisponible sur cette caméra'); return; }
+        if (!ok) { _toast('PTZ : ${PtzService.instance.lastError ?? "connexion impossible"}'); return; }
       }
+      bool moved;
       switch (dir) {
-        case 'up': await PtzService.instance.up(); break;
-        case 'down': await PtzService.instance.down(); break;
-        case 'left': await PtzService.instance.left(); break;
-        case 'right': await PtzService.instance.right(); break;
+        case 'up': moved = await PtzService.instance.up(); break;
+        case 'down': moved = await PtzService.instance.down(); break;
+        case 'left': moved = await PtzService.instance.left(); break;
+        default: moved = await PtzService.instance.right(); break;
       }
-    } catch (_) {
-      _toast('Mouvement impossible');
+      if (!moved) _toast('PTZ : ${PtzService.instance.lastError ?? "mouvement refusé"}');
     } finally {
       _ptzBusy = false;
     }
@@ -637,7 +655,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
           ]),
         )),
 
-      // Badge LIVE (caché si erreur)
+      // Badge LIVE (seul élément sur la vidéo)
       if (_error == null) Positioned(
         top: 10, left: 10,
         child: Container(
@@ -649,30 +667,6 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
             const Text('LIVE', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700, letterSpacing: 1)),
           ]),
         ),
-      ),
-
-      // Refresh (toujours visible) + capture (si flux OK), haut droite
-      Positioned(
-        top: 10, right: 10,
-        child: Row(children: [
-          _miniBtn(Icons.refresh, _reload),
-          if (_error == null) ...[
-            const SizedBox(width: 8),
-            _miniBtn(Icons.camera_alt_outlined, _capture),
-          ],
-        ]),
-      ),
-
-      // D-pad orientation (bas gauche)
-      if (_error == null) Positioned(
-        bottom: 10, left: 10,
-        child: _PtzPad(onMove: _ptzMove),
-      ),
-
-      // Bouton plein écran (bas droite)
-      if (_error == null) Positioned(
-        bottom: 10, right: 10,
-        child: _miniBtn(Icons.fullscreen, _openFullscreen, size: 22),
       ),
     ]);
   }
@@ -720,7 +714,10 @@ class _GridPainter extends CustomPainter {
 class _PtzPad extends StatelessWidget {
   final Future<void> Function(String dir) onMove;
   final double size;
-  const _PtzPad({required this.onMove, this.size = 96});
+  final Color iconColor;
+  final Color bgColor;
+  const _PtzPad({required this.onMove, this.size = 96,
+      this.iconColor = Colors.white, this.bgColor = const Color(0x73000000)});
 
   @override
   Widget build(BuildContext context) {
@@ -730,12 +727,15 @@ class _PtzPad extends StatelessWidget {
       child: GestureDetector(
         onTap: () => onMove(dir),
         behavior: HitTestBehavior.opaque,
-        child: SizedBox(width: btn, height: btn, child: Icon(icon, color: Colors.white, size: 20)),
+        child: SizedBox(width: btn, height: btn, child: Icon(icon, color: iconColor, size: 20)),
       ),
     );
     return Container(
       width: size, height: size,
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.45), shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: bgColor, shape: BoxShape.circle,
+        border: Border.all(color: iconColor.withValues(alpha: 0.18)),
+      ),
       child: Stack(children: [
         arrow('up', Icons.keyboard_arrow_up, Alignment.topCenter),
         arrow('down', Icons.keyboard_arrow_down, Alignment.bottomCenter),
@@ -743,7 +743,7 @@ class _PtzPad extends StatelessWidget {
         arrow('right', Icons.keyboard_arrow_right, Alignment.centerRight),
         Align(alignment: Alignment.center, child: Container(
           width: btn * 0.5, height: btn * 0.5,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.25)),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: iconColor.withValues(alpha: 0.25)),
         )),
       ]),
     );
