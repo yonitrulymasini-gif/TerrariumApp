@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +9,12 @@ import '../services/community_service.dart';
 import '../services/profile_service.dart';
 import '../services/scenario_service.dart';
 import '../services/app_nav.dart';
+import '../services/species_service.dart';
+import '../services/device_service.dart';
+import '../utils/fade_route.dart';
+import 'species_detail_screen.dart';
+import 'species_add_screen.dart';
+import 'pairing_screen.dart';
 
 class CommunauteScreen extends StatefulWidget {
   const CommunauteScreen({super.key});
@@ -16,20 +23,52 @@ class CommunauteScreen extends StatefulWidget {
 }
 
 class _CommunauteScreenState extends State<CommunauteScreen> {
-  // null = "Tous"
-  String? _filter;
+  int _section = 0; // 0 = Général, 1 = Scénarios, 2 = Reptiles
+  final _speciesCtrl = TextEditingController();
+  String _speciesQuery = '';
+  String? _speciesCatFilter; // null = Tous
+
+  // Préférences issues du questionnaire (pour « Suggéré pour toi »)
+  String? _userNiveau;
+  List<String> _userAnimals = [];
+
+  static const _catFilters = ['Lézard', 'Serpent', 'Araignée', 'Tortue', 'Amphibien', 'Autre'];
 
   @override
   void initState() {
     super.initState();
     AppNav.instance.addListener(_onNav);
+    _loadPrefs();
+    // Fiches ajoutées via l'app (Firestore) : écoute temps réel.
+    SpeciesService.instance.init();
+    SpeciesService.instance.addListener(_onSpeciesChange);
     // Au cas où un scénario serait déjà en attente à la création
     WidgetsBinding.instance.addPostFrameCallback((_) => _onNav());
+  }
+
+  void _onSpeciesChange() { if (mounted) setState(() {}); }
+
+  Future<void> _loadPrefs() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final data = doc.data();
+      if (data == null || !mounted) return;
+      setState(() {
+        _userNiveau = data['niveau'] as String?;
+        _userAnimals = List<String>.from(data['animaux'] ?? []);
+      });
+    } catch (_) {
+      // Pas de profil (invité…) → pas de suggestions, sans erreur.
+    }
   }
 
   @override
   void dispose() {
     AppNav.instance.removeListener(_onNav);
+    SpeciesService.instance.removeListener(_onSpeciesChange);
+    _speciesCtrl.dispose();
     super.dispose();
   }
 
@@ -37,6 +76,7 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
     if (AppNav.instance.tab != AppNav.communityTab) return;
     final scenario = AppNav.instance.consumePendingScenario();
     if (scenario != null && mounted) {
+      setState(() => _section = 1); // bascule sur Scénarios
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _showNewPost(context, scenario: scenario);
       });
@@ -45,6 +85,13 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    var speciesResults = SpeciesService.search(_speciesQuery);
+    if (_speciesCatFilter != null) {
+      speciesResults = speciesResults.where((s) => s.category == _speciesCatFilter).toList();
+    }
+    final suggestions = SpeciesService.suggestFor(niveau: _userNiveau, animaux: _userAnimals);
+    // Suggestions visibles seulement en vue "neutre" (pas de recherche/filtre).
+    final showSuggestions = suggestions.isNotEmpty && _speciesQuery.trim().isEmpty && _speciesCatFilter == null;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -58,86 +105,193 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
                   const SizedBox(height: 6),
                   Text('Explore', style: AppTextStyles.serif28),
                 ]),
-                GestureDetector(
-                  onTap: () => _showNewPost(context),
-                  child: Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle, color: ThemeService.instance.colors.primary,
-                      boxShadow: [BoxShadow(color: ThemeService.instance.colors.primary.withValues(alpha: 0.3),
-                          blurRadius: 16, offset: const Offset(0, 4))],
+                if (_section == 0)
+                  GestureDetector(
+                    onTap: () => _showNewPost(context),
+                    child: Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: ThemeService.instance.colors.primary,
+                        boxShadow: [BoxShadow(color: ThemeService.instance.colors.primary.withValues(alpha: 0.3),
+                            blurRadius: 16, offset: const Offset(0, 4))],
+                      ),
+                      child: Icon(Icons.add, color: ThemeService.instance.colors.bg, size: 22),
                     ),
-                    child: Icon(Icons.add, color: ThemeService.instance.colors.bg, size: 22),
-                  ),
-                ),
+                  )
+                else
+                  const SizedBox(width: 44),
               ]),
             )),
 
-            // ── Filtres catégories ────────────────────────────────────────
+            // ── Sélecteur Fil / Espèces ───────────────────────────────────
             SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: SizedBox(
-                height: 38,
-                child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
+              child: _SectionToggle(section: _section, onChanged: (s) => setState(() => _section = s)),
+            )),
+
+            if (_section == 2) ...[
+              // ── Carte expert (frère passionné) ──────────────────────────
+              // Pas de const : la carte lit les couleurs du thème et doit se
+              // reconstruire quand il change.
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                // ignore: prefer_const_constructors
+                child: _ExpertCard(),
+              )),
+
+              // ── Suggéré pour toi (selon le questionnaire) ────────────────
+              if (showSuggestions) ...[
+                SliverToBoxAdapter(child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Row(children: [
+                    Icon(Icons.auto_awesome, size: 13, color: ThemeService.instance.colors.primary),
+                    const SizedBox(width: 6),
+                    Text('SUGGÉRÉ POUR TOI', style: AppTextStyles.eyebrow),
+                  ]),
+                )),
+                SliverToBoxAdapter(child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: SizedBox(
+                    height: 182,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: suggestions.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (_, i) => _SuggestedCard(species: suggestions[i]),
+                    ),
+                  ),
+                )),
+              ],
+
+              // ── Recherche + ajout + grille ──────────────────────────────
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(children: [
+                  Expanded(child: Container(
+                    decoration: BoxDecoration(
+                      color: ThemeService.instance.colors.card,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: ThemeService.instance.colors.border),
+                    ),
+                    child: TextField(
+                      controller: _speciesCtrl,
+                      onChanged: (v) => setState(() => _speciesQuery = v),
+                      style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Rechercher un reptile…',
+                        hintStyle: TextStyle(color: ThemeService.instance.colors.textMuted, fontSize: 14),
+                        prefixIcon: Icon(Icons.search, color: ThemeService.instance.colors.textMuted, size: 20),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  )),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(fadeRoute(const SpeciesAddScreen())),
+                    child: Container(
+                      width: 48, height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: ThemeService.instance.colors.border),
+                        color: ThemeService.instance.colors.card,
+                      ),
+                      child: Icon(Icons.add, color: ThemeService.instance.colors.primary, size: 22),
+                    ),
+                  ),
+                ]),
+              )),
+
+              // ── Filtre par catégorie ────────────────────────────────────
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: SizedBox(height: 36, child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   children: [
-                    _FilterChip(label: 'Tous', icon: Icons.grid_view_rounded,
-                        selected: _filter == null, onTap: () => setState(() => _filter = null)),
-                    ...PostCategory.all.map((c) => Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: _FilterChip(label: c.label, icon: c.icon,
-                          selected: _filter == c.key, onTap: () => setState(() => _filter = c.key)),
-                    )),
+                    _CatChip(label: 'Tous', selected: _speciesCatFilter == null,
+                        onTap: () => setState(() => _speciesCatFilter = null)),
+                    for (final cat in _catFilters) ...[
+                      const SizedBox(width: 8),
+                      _CatChip(label: cat, selected: _speciesCatFilter == cat,
+                          onTap: () => setState(() => _speciesCatFilter = cat)),
+                    ],
                   ],
-                ),
-              ),
-            )),
+                )),
+              )),
 
-            StreamBuilder<List<CommunityPost>>(
-              stream: CommunityService.postsStream(),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return SliverToBoxAdapter(
-                    child: Center(child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: CircularProgressIndicator(color: ThemeService.instance.colors.primary),
-                    )),
-                  );
-                }
-                final all = snap.data ?? [];
-                final posts = _filter == null
-                    ? all
-                    : all.where((p) => p.category == _filter).toList();
-
-                if (posts.isEmpty) {
-                  final emptyMsg = _filter == null
-                      ? 'Sois le premier à poster !'
-                      : 'Aucun post dans "${PostCategory.byKey(_filter!).label}"';
-                  return SliverToBoxAdapter(child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                    child: Column(children: [
-                      const SizedBox(height: 40),
-                      Icon(Icons.people_outline, size: 48, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text(emptyMsg, textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, color: ThemeService.instance.colors.textMuted)),
-                      const SizedBox(height: 8),
-                      Text('Partage ton setup, tes conseils ou tes scénarios.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textHint)),
-                    ]),
-                  ));
-                }
-                return SliverList(delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => Padding(
-                    padding: EdgeInsets.fromLTRB(20, i == 0 ? 16 : 0, 20, 16),
-                    child: _PostCard(post: posts[i]),
+              if (speciesResults.isEmpty)
+                SliverToBoxAdapter(child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 40, 20, 0),
+                  child: Column(children: [
+                    Icon(Icons.search_off, size: 44, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
+                    const SizedBox(height: 12),
+                    Text('Aucun reptile trouvé', textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 15, color: ThemeService.instance.colors.textMuted)),
+                  ]),
+                ))
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.80),
+                    delegate: SliverChildBuilderDelegate(
+                      (ctx, i) => SpeciesCard(species: speciesResults[i]),
+                      childCount: speciesResults.length,
+                    ),
                   ),
-                  childCount: posts.length,
-                ));
-              },
-            ),
+                ),
+            ] else ...[
+              // ── Général (0) / Scénarios (1) : flux de posts ─────────────
+              StreamBuilder<List<CommunityPost>>(
+                stream: CommunityService.postsStream(),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return SliverToBoxAdapter(
+                      child: Center(child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: CircularProgressIndicator(color: ThemeService.instance.colors.primary),
+                      )),
+                    );
+                  }
+                  final all = snap.data ?? [];
+                  final isScenarios = _section == 1;
+                  // Un post "scénario" = un post avec un scénario joint.
+                  final posts = all.where((p) =>
+                      isScenarios ? p.scenario != null : p.scenario == null).toList();
+
+                  if (posts.isEmpty) {
+                    return SliverToBoxAdapter(child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+                      child: Column(children: [
+                        const SizedBox(height: 30),
+                        Icon(isScenarios ? Icons.auto_awesome_outlined : Icons.people_outline,
+                            size: 48, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
+                        const SizedBox(height: 16),
+                        Text(isScenarios ? 'Aucun scénario partagé' : 'Sois le premier à poster !',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: ThemeService.instance.colors.textMuted)),
+                        const SizedBox(height: 8),
+                        Text(isScenarios
+                                ? 'Partage un scénario depuis l\'onglet Scénarios.'
+                                : 'Partage ton setup, une astuce ou une photo.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textHint)),
+                      ]),
+                    ));
+                  }
+                  return SliverList(delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => Padding(
+                      padding: EdgeInsets.fromLTRB(20, i == 0 ? 16 : 0, 20, 16),
+                      child: _PostCard(post: posts[i]),
+                    ),
+                    childCount: posts.length,
+                  ));
+                },
+              ),
+            ],
 
             const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
@@ -154,36 +308,6 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
       backgroundColor: ThemeService.instance.colors.card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => _NewPostSheet(messenger: messenger, scenario: scenario),
-    );
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  final PostCategory category;
-  final bool selected;
-  final VoidCallback onTap;
-  const _CategoryChip({required this.category, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ThemeService.instance.colors;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected ? c.primary.withValues(alpha: 0.15) : c.bg,
-          borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: selected ? c.primary.withValues(alpha: 0.5) : c.border),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(category.icon, size: 15, color: selected ? c.primary : c.textMuted),
-          const SizedBox(width: 6),
-          Text(category.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500,
-              color: selected ? c.primary : c.textMuted)),
-        ]),
-      ),
     );
   }
 }
@@ -210,12 +334,60 @@ class _CategoryBadge extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
+// ── Sélecteur de section (Général / Scénarios / Reptiles) ────────────────────
+
+class _SectionToggle extends StatelessWidget {
+  final int section;
+  final ValueChanged<int> onChanged;
+  const _SectionToggle({required this.section, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    Widget seg(int i, String label, IconData icon) {
+      final sel = section == i;
+      return Expanded(child: GestureDetector(
+        onTap: () => onChanged(i),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: sel ? c.primary : Colors.transparent,
+            borderRadius: BorderRadius.circular(50),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 15, color: sel ? c.bg : c.textMuted),
+            const SizedBox(width: 5),
+            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600,
+                    color: sel ? c.bg : c.textMuted))),
+          ]),
+        ),
+      ));
+    }
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: c.card, borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: c.border),
+      ),
+      child: Row(children: [
+        seg(0, 'Général', Icons.chat_bubble_outline),
+        seg(1, 'Scénarios', Icons.auto_awesome_outlined),
+        seg(2, 'Reptiles', Icons.travel_explore),
+      ]),
+    );
+  }
+}
+
+// ── Puce de filtre catégorie (Reptiles) ──────────────────────────────────────
+
+class _CatChip extends StatelessWidget {
   final String label;
-  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
-  const _FilterChip({required this.label, required this.icon, required this.selected, required this.onTap});
+  const _CatChip({required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -223,20 +395,104 @@ class _FilterChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        duration: const Duration(milliseconds: 160),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: selected ? c.primary : c.card,
           borderRadius: BorderRadius.circular(50),
           border: Border.all(color: selected ? c.primary : c.border),
         ),
-        child: Row(children: [
-          Icon(icon, size: 15, color: selected ? c.bg : c.textMuted),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-              color: selected ? c.bg : c.textSecondary)),
+        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+            color: selected ? c.bg : c.textSecondary)),
+      ),
+    );
+  }
+}
+
+// ── Carte suggestion (liste horizontale « Suggéré pour toi ») ────────────────
+
+class _SuggestedCard extends StatelessWidget {
+  final ReptileSpecies species;
+  const _SuggestedCard({required this.species});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(fadeRoute(SpeciesDetailScreen(species: species))),
+      child: Container(
+        width: 150,
+        decoration: glassCard(radius: 18),
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(height: 92, width: double.infinity, child: SpeciesVisual(species: species)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(species.commonName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textPrimary)),
+              const SizedBox(height: 2),
+              Text(species.scientificName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5, fontStyle: FontStyle.italic, color: c.textMuted)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: speciesLevelColor(species).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                child: Text(speciesLevelLabel(species),
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700,
+                        color: speciesLevelColor(species))),
+              ),
+            ]),
+          ),
         ]),
       ),
+    );
+  }
+}
+
+// ── Carte expert (au-dessus de la recherche Reptiles) ────────────────────────
+
+class _ExpertCard extends StatelessWidget {
+  const _ExpertCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    final fallback = Container(
+      width: 58, height: 58,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(colors: [c.primary, c.radialTop],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
+      ),
+      child: Icon(Icons.person, color: c.bg, size: 28),
+    );
+    return Container(
+      decoration: glassCard(radius: 20),
+      padding: const EdgeInsets.all(14),
+      child: Row(children: [
+        ClipOval(child: Image.asset(
+          'assets/species/expert.jpg',
+          width: 58, height: 58, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
+        )),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.verified, size: 15, color: c.primary),
+            const SizedBox(width: 5),
+            Flexible(child: Text('Théo Masini', maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.textPrimary))),
+          ]),
+          const SizedBox(height: 4),
+          Text("Passionné de terrariophilie depuis 10 ans, il fournit les informations de chaque fiche.",
+              style: TextStyle(fontSize: 12, color: c.textMuted, height: 1.45)),
+        ])),
+      ]),
     );
   }
 }
@@ -257,7 +513,6 @@ class _NewPostSheetState extends State<_NewPostSheet> {
   Uint8List? _imageBytes;
   bool _publishing = false;
   String? _error;
-  String _category = 'setup';
 
   Future<void> _pickImage(ImageSource source) async {
     final picked = await ImagePicker().pickImage(
@@ -277,7 +532,8 @@ class _NewPostSheetState extends State<_NewPostSheet> {
     setState(() { _publishing = true; _error = null; });
     try {
       await CommunityService.createPost(_ctrl.text.trim(),
-          pickedFile: _pickedFile, scenario: widget.scenario, category: _category);
+          pickedFile: _pickedFile, scenario: widget.scenario,
+          category: widget.scenario != null ? 'scenario' : 'general');
       final messenger = widget.messenger;
       Navigator.pop(context);
       messenger.showSnackBar(SnackBar(
@@ -410,20 +666,6 @@ class _NewPostSheetState extends State<_NewPostSheet> {
                   ),
                 )),
               ]),
-            ],
-
-            // Sélecteur de catégorie (masqué si scénario joint = forcé)
-            if (widget.scenario == null) ...[
-              const SizedBox(height: 16),
-              Text('CATÉGORIE', style: AppTextStyles.eyebrow),
-              const SizedBox(height: 10),
-              Wrap(spacing: 8, runSpacing: 8, children: PostCategory.all
-                  .where((c) => c.key != 'scenario')
-                  .map((c) => _CategoryChip(
-                        category: c,
-                        selected: _category == c.key,
-                        onTap: () => setState(() => _category = c.key),
-                      )).toList()),
             ],
 
             if (_error != null) ...[
@@ -681,8 +923,10 @@ class _PostCardState extends State<_PostCard> {
               Row(children: [
                 Flexible(child: Text(post.username, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary))),
-                const SizedBox(width: 8),
-                _CategoryBadge(category: PostCategory.byKey(post.category)),
+                if (post.scenario != null) ...[
+                  const SizedBox(width: 8),
+                  _CategoryBadge(category: PostCategory.byKey(post.category)),
+                ],
               ]),
               Text(post.timeAgo, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
             ])),
@@ -771,7 +1015,24 @@ class _SharedScenarioCardState extends State<_SharedScenarioCard> {
   bool _importing = false;
   bool _imported = false;
 
+  @override
+  void initState() {
+    super.initState();
+    DeviceService.instance.addListener(_onDevice);
+  }
+
+  @override
+  void dispose() {
+    DeviceService.instance.removeListener(_onDevice);
+    super.dispose();
+  }
+
+  void _onDevice() { if (mounted) setState(() {}); }
+
+  void _goPair() => Navigator.of(context).push(fadeRoute(const PairingScreen()));
+
   Future<void> _import() async {
+    if (!DeviceService.instance.hasDevice) return; // besoin d'un terrarium
     setState(() => _importing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -823,29 +1084,41 @@ class _SharedScenarioCardState extends State<_SharedScenarioCard> {
           ])),
         ]),
         const SizedBox(height: 12),
-        GestureDetector(
-          onTap: (_importing || _imported) ? null : _import,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: _imported ? Colors.transparent : c.primary,
-              borderRadius: BorderRadius.circular(50),
-              border: _imported ? Border.all(color: c.primary.withValues(alpha: 0.4)) : null,
-            ),
-            child: _importing
-                ? Center(child: SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: c.bg)))
-                : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Icon(_imported ? Icons.check : Icons.download_outlined,
-                        size: 16, color: _imported ? c.primary : c.bg),
-                    const SizedBox(width: 6),
-                    Text(_imported ? 'Importé' : 'Importer ce scénario',
+        Builder(builder: (context) {
+          final hasDevice = DeviceService.instance.hasDevice;
+          // Outline si déjà importé OU si aucun appareil (état "verrouillé").
+          final outlined = _imported || !hasDevice;
+          return GestureDetector(
+            onTap: _imported
+                ? null
+                : (!hasDevice ? _goPair : (_importing ? null : _import)),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: outlined ? Colors.transparent : c.primary,
+                borderRadius: BorderRadius.circular(50),
+                border: outlined ? Border.all(color: c.primary.withValues(alpha: 0.4)) : null,
+              ),
+              child: _importing
+                  ? Center(child: SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: c.bg)))
+                  : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(
+                        _imported ? Icons.check : (!hasDevice ? Icons.link_off : Icons.download_outlined),
+                        size: 16, color: outlined ? c.primary : c.bg),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text(
+                        _imported
+                            ? 'Importé'
+                            : (!hasDevice ? 'Connecte ton Terra pour importer' : 'Importer ce scénario'),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                            color: _imported ? c.primary : c.bg)),
-                  ]),
-          ),
-        ),
+                            color: outlined ? c.primary : c.bg))),
+                    ]),
+            ),
+          );
+        }),
       ]),
     );
   }

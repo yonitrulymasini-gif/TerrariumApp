@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
 
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(fadeRoute(const RegisterScreen())),
+                  onTap: () => Navigator.of(context).pushReplacement(fadeRoute(const RegisterScreen())),
                   child: RichText(text: TextSpan(
                     text: 'Pas encore de compte ? ',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 14),

@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class AuthService {
   static final _auth = FirebaseAuth.instance;
@@ -10,9 +11,10 @@ class AuthService {
       ..addScope('email')
       ..addScope('profile');
 
-    // signInWithProvider : flux OAuth natif iOS/Android (Safari + retour via
-    // l'URL scheme du reversed client ID). signInWithPopup est web uniquement.
-    final result = await _auth.signInWithProvider(provider);
+    // Web : popup. Natif iOS/Android : flux OAuth via l'URL scheme.
+    final result = kIsWeb
+        ? await _auth.signInWithPopup(provider)
+        : await _auth.signInWithProvider(provider);
     return result.user;
   }
 

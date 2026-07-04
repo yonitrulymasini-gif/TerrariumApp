@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import 'login_screen.dart';
+import 'register_screen.dart';
 import '../utils/fade_route.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -110,14 +110,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       _goToStep(_step + 1);
     } else {
       Navigator.of(context).pushReplacement(
-        fadeRoute(const LoginScreen()),
+        fadeRoute(const RegisterScreen()),
       );
     }
   }
 
   void _skip() {
     Navigator.of(context).pushReplacement(
-      fadeRoute(const LoginScreen()),
+      fadeRoute(const RegisterScreen()),
     );
   }
 

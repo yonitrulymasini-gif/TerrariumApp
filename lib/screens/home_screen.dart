@@ -552,6 +552,9 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
     return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       _PtzPad(onStart: _ptzStart, onStop: _ptzStop, size: 78, iconColor: c.textPrimary, bgColor: c.card),
       Row(children: [
+        if (_player != null)
+          _PlayPauseButton(player: _player!, bg: c.card, border: c.border, icon: c.textPrimary),
+        const SizedBox(width: 10),
         _ctrlBtn(Icons.refresh, _reload, c),
         const SizedBox(width: 10),
         _ctrlBtn(Icons.camera_alt_outlined, _capture, c),
@@ -764,6 +767,52 @@ class _PtzPad extends StatelessWidget {
   }
 }
 
+// ── Bouton pause / lecture (suit l'état du lecteur) ──────────────────────────
+
+class _PlayPauseButton extends StatefulWidget {
+  final Player player;
+  final Color bg;
+  final Color border;
+  final Color icon;
+  final double diameter;
+  const _PlayPauseButton({required this.player, required this.bg, required this.border,
+      required this.icon, this.diameter = 46});
+
+  @override
+  State<_PlayPauseButton> createState() => _PlayPauseButtonState();
+}
+
+class _PlayPauseButtonState extends State<_PlayPauseButton> {
+  late bool _playing = widget.player.state.playing;
+  StreamSubscription? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = widget.player.stream.playing.listen((p) {
+      if (mounted) setState(() => _playing = p);
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => widget.player.playOrPause(),
+      child: Container(
+        width: widget.diameter, height: widget.diameter,
+        decoration: BoxDecoration(color: widget.bg, shape: BoxShape.circle, border: Border.all(color: widget.border)),
+        child: Icon(_playing ? Icons.pause : Icons.play_arrow, color: widget.icon, size: widget.diameter * 0.46),
+      ),
+    );
+  }
+}
+
 // ── Caméra plein écran ──────────────────────────────────────────────────────
 
 class _CameraFullscreenPage extends StatefulWidget {
@@ -822,6 +871,13 @@ class _CameraFullscreenPageState extends State<_CameraFullscreenPage> {
             ),
           ),
         ),
+        // Pause / lecture (bas centre)
+        Positioned(bottom: 24, left: 0, right: 0, child: SafeArea(child: Center(
+          child: _PlayPauseButton(
+            player: widget.controller.player,
+            bg: Colors.black54, border: Colors.transparent, icon: Colors.white, diameter: 56,
+          ),
+        ))),
         // D-pad orientation (bas gauche)
         Positioned(bottom: 24, left: 24, child: SafeArea(child: _PtzPad(onStart: widget.onPtzStart, onStop: widget.onPtzStop, size: 120))),
         // Refresh (haut droite)

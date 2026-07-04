@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
@@ -128,8 +129,7 @@ class _PairingScreenState extends State<PairingScreen> {
           onToggleObscure: () => setState(() => _obscureWifi = !_obscureWifi),
           onNext: _next);
       case 2: return _StepConnecting(key: const ValueKey(2));
-      case 3: return _StepSuccess(key: const ValueKey(3),
-          deviceId: _deviceCtrl.text.trim(), onHome: _goHome);
+      case 3: return _StepSuccess(key: const ValueKey(3), onHome: _goHome);
       default: return const SizedBox.shrink();
     }
   }
@@ -279,15 +279,16 @@ class _StepConnecting extends StatelessWidget {
 // ── Étape 4 : Succès ────────────────────────────────────────────────────────
 
 class _StepSuccess extends StatelessWidget {
-  final String deviceId;
   final VoidCallback onHome;
-  const _StepSuccess({super.key, required this.deviceId, required this.onHome});
+  const _StepSuccess({super.key, required this.onHome});
 
   @override
   Widget build(BuildContext context) {
+    final prenom = FirebaseAuth.instance.currentUser?.displayName?.trim() ?? '';
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 40, 28, 40),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      child: Column(children: [
+        const Spacer(),
         Container(
           width: 80, height: 80,
           decoration: BoxDecoration(
@@ -300,13 +301,13 @@ class _StepSuccess extends StatelessWidget {
         const SizedBox(height: 28),
         Text('Connecté !', style: AppTextStyles.serif28),
         const SizedBox(height: 12),
-        Text(deviceId,
-            style: TextStyle(fontSize: 13, color: AppColors.textMuted,
-                fontFamily: 'monospace', letterSpacing: 1)),
-        const SizedBox(height: 8),
-        Text('Ton terrarium est en ligne et prêt.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.6)),
+        Text(
+          prenom.isNotEmpty
+              ? 'Bien joué, $prenom !\nTon terrarium est en ligne et prêt.'
+              : 'Ton terrarium est en ligne et prêt.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.6),
+        ),
         const Spacer(),
         _PairButton(label: 'Voir mon tableau de bord', onTap: onHome),
       ]),

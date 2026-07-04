@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'theme/app_theme.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/pairing_screen.dart';
 import 'services/deep_link_service.dart';
 import 'services/device_service.dart';
@@ -32,6 +33,31 @@ void main() async {
   ));
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const TerraApp());
+}
+
+/// Décide de l'écran de départ selon l'état de connexion.
+/// Connecté (session persistée) → l'app directement. Sinon → onboarding.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          final c = ThemeService.instance.colors;
+          return Scaffold(
+            backgroundColor: c.bg,
+            body: Center(child: CircularProgressIndicator(color: c.primary)),
+          );
+        }
+        // Un utilisateur (même anonyme) → on va directement dans l'app.
+        if (snap.hasData) return const MainShell();
+        return const OnboardingScreen();
+      },
+    );
+  }
 }
 
 class TerraApp extends StatefulWidget {
@@ -91,7 +117,7 @@ class _TerraAppState extends State<TerraApp> {
           theme: buildAppTheme(colors),
           localizationsDelegates: GlobalMaterialLocalizations.delegates,
           supportedLocales: const [Locale('fr')],
-          home: const OnboardingScreen(),
+          home: const AuthGate(),
           onGenerateRoute: (settings) {
             if (settings.name == '/pair') {
               final deviceId = settings.arguments as String?;

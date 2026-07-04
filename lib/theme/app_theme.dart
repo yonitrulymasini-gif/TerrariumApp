@@ -93,6 +93,13 @@ ThemeData buildAppTheme(TerraThemeColors colors) {
     fontFamily: GoogleFonts.inter().fontFamily,
     colorScheme: scheme,
     dialogTheme: DialogThemeData(backgroundColor: colors.card),
+    // Snackbars lisibles sur tous les thèmes (texte assorti au fond de carte).
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: colors.card,
+      contentTextStyle: TextStyle(color: colors.textPrimary, fontSize: 14),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
     pageTransitionsTheme: PageTransitionsTheme(
       builders: {
         for (final p in TargetPlatform.values) p: const _FadeTransitionBuilder(),
