@@ -6,6 +6,7 @@ import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
@@ -68,9 +69,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Text('Bonjour', style: AppTextStyles.eyebrow),
                             const SizedBox(height: 4),
-                            Text('Yoni', style: AppTextStyles.serif28),
+                            Text(
+                              FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true
+                                  ? FirebaseAuth.instance.currentUser!.displayName!.trim()
+                                  : 'toi',
+                              style: AppTextStyles.serif28,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
+                        // Logo Terra. (le point prend la couleur du thème)
+                        Expanded(child: Center(child: RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.fraunces(fontSize: 24, fontWeight: FontWeight.w700,
+                                color: ThemeService.instance.colors.textPrimary),
+                            children: [
+                              const TextSpan(text: 'Terra'),
+                              TextSpan(text: '.',
+                                  style: TextStyle(color: ThemeService.instance.colors.primary)),
+                            ],
+                          ),
+                        ))),
                         StreamBuilder<int>(
                           stream: AlertsScreen.unreadCount(),
                           builder: (ctx, snap) {

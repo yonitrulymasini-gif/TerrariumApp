@@ -303,8 +303,8 @@ class _StepSuccess extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           prenom.isNotEmpty
-              ? 'Bien joué, $prenom !\nTon terrarium est en ligne et prêt.'
-              : 'Ton terrarium est en ligne et prêt.',
+              ? 'Bienvenue dans ta jungle connectée, $prenom.'
+              : 'Bienvenue dans ta jungle connectée.',
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.6),
         ),

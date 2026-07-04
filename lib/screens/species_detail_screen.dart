@@ -86,7 +86,7 @@ class SpeciesVisual extends StatelessWidget {
         fit: BoxFit.cover, width: double.infinity,
         fadeInDuration: const Duration(milliseconds: 180),
         fadeOutDuration: const Duration(milliseconds: 180),
-        placeholder: (_, __) => const _NoPhotoPlaceholder(),
+        placeholder: (_, __) => const _PhotoLoading(),
         errorWidget: (_, __, ___) => _INatFallback(species: species),
       );
     }
@@ -109,6 +109,8 @@ class _INatFallback extends StatelessWidget {
     return FutureBuilder<INatPhoto?>(
       future: INaturalistService.photoFor(species.scientificName),
       builder: (context, snap) {
+        // Recherche encore en cours → spinner, pas « pas de photo ».
+        if (snap.connectionState != ConnectionState.done) return const _PhotoLoading();
         final photo = snap.data;
         if (photo == null) return const _NoPhotoPlaceholder();
         return CachedNetworkImage(
@@ -117,10 +119,34 @@ class _INatFallback extends StatelessWidget {
           fit: BoxFit.cover, width: double.infinity,
           fadeInDuration: const Duration(milliseconds: 180),
           fadeOutDuration: const Duration(milliseconds: 180),
-          placeholder: (_, __) => const _NoPhotoPlaceholder(),
+          placeholder: (_, __) => const _PhotoLoading(),
           errorWidget: (_, __, ___) => const _NoPhotoPlaceholder(),
         );
       },
+    );
+  }
+}
+
+/// Pendant qu'une photo se télécharge : fond doux + petit spinner.
+/// (Différent de « pas de photo », qui signifie qu'il n'en existe pas.)
+class _PhotoLoading extends StatelessWidget {
+  const _PhotoLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [c.radialTop.withValues(alpha: 0.4), c.card],
+        ),
+      ),
+      child: Center(child: SizedBox(
+        width: 22, height: 22,
+        child: CircularProgressIndicator(
+            strokeWidth: 2, color: c.primary.withValues(alpha: 0.6)),
+      )),
     );
   }
 }
@@ -230,7 +256,7 @@ class _SpeciesGalleryState extends State<_SpeciesGallery> {
     // Pas de repli iNaturalist ici (déjà présent dans la galerie).
     if (url.startsWith('http')) {
       return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover, width: double.infinity,
-          placeholder: (_, __) => const _NoPhotoPlaceholder(),
+          placeholder: (_, __) => const _PhotoLoading(),
           errorWidget: (_, __, ___) => const _NoPhotoPlaceholder());
     }
     return Image.asset(url, fit: BoxFit.cover, width: double.infinity,
@@ -338,7 +364,7 @@ class _INatSlide extends StatelessWidget {
       fit: BoxFit.cover, width: double.infinity,
       fadeInDuration: const Duration(milliseconds: 180),
       fadeOutDuration: const Duration(milliseconds: 180),
-      placeholder: (_, __) => const _NoPhotoPlaceholder(),
+      placeholder: (_, __) => const _PhotoLoading(),
       errorWidget: (_, __, ___) => const _NoPhotoPlaceholder(),
     );
   }

@@ -37,6 +37,8 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final c = ThemeService.instance.colors;
+    // Clavier ouvert → on masque la navbar (sinon elle flotte au-dessus).
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     // Non-const VOLONTAIRE : de nouvelles instances à chaque build pour que les
     // écrans se reconstruisent quand le thème change (l'état est préservé par
     // position dans l'IndexedStack). Ne pas remettre `const` ici.
@@ -70,13 +72,14 @@ class _MainShellState extends State<MainShell> {
             ),
           ))),
           IndexedStack(index: _index, children: screens),
-          Positioned(
-            left: 0, right: 0, bottom: 0,
-            child: TerraBottomNav(
-              currentIndex: _index,
-              onTap: (i) => AppNav.instance.goToTab(i),
+          if (!keyboardOpen)
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: TerraBottomNav(
+                currentIndex: _index,
+                onTap: (i) => AppNav.instance.goToTab(i),
+              ),
             ),
-          ),
         ],
       ),
     );
