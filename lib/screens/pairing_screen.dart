@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/device_service.dart';
+import '../services/app_nav.dart';
 import '../utils/fade_route.dart';
 import 'main_shell.dart';
 import 'qr_scanner_screen.dart';
@@ -56,13 +57,14 @@ class _PairingScreenState extends State<PairingScreen> {
     await Future.delayed(const Duration(seconds: 3));
     DeviceService.instance.addDevice(TerraDevice(
       serialId: _deviceCtrl.text.trim(),
-      name: 'Terrarium #${DeviceService.instance.devices.length + 1}',
+      name: 'Jungle Tropicale',
       online: true,
     ));
     if (mounted) setState(() { _step = 3; _connecting = false; });
   }
 
   void _goHome() {
+    AppNav.instance.reset(); // après appairage → démarre sur l'Accueil
     Navigator.of(context).pushAndRemoveUntil(fadeRoute(const MainShell()), (_) => false);
   }
 
@@ -222,7 +224,7 @@ class _StepWifi extends StatelessWidget {
         const SizedBox(height: 24),
         Text('Config WiFi', style: AppTextStyles.serif28),
         const SizedBox(height: 8),
-        Text('Ton ESP32 va se connecter à ton réseau.\nUtilise le WiFi 2.4GHz.',
+        Text('Ton boîtier va se connecter à ton réseau.\nUtilise le WiFi 2.4GHz.',
             style: TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.6)),
         const SizedBox(height: 40),
 
@@ -268,7 +270,7 @@ class _StepConnecting extends StatelessWidget {
         SizedBox(height: 32),
         Text('Connexion en cours…', style: TextStyle(fontSize: 20, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
         SizedBox(height: 12),
-        Text('Ton ESP32 se connecte au WiFi\net s\'enregistre sur nos serveurs.',
+        Text('Ton boîtier se connecte au WiFi\net s\'enregistre sur nos serveurs.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.textMuted, height: 1.6)),
       ]),

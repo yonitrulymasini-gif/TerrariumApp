@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_theme.dart';
 import '../widgets/terra_button.dart';
 import '../services/auth_service.dart';
+import '../services/app_nav.dart';
 import '../utils/fade_route.dart';
 import 'main_shell.dart';
 import 'onboarding_screen.dart';
@@ -35,7 +36,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _goHome() => Navigator.of(context).pushReplacement(fadeRoute(const MainShell()));
+  void _goHome() {
+    AppNav.instance.reset(); // nouvelle session → démarre sur l'Accueil
+    Navigator.of(context).pushReplacement(fadeRoute(const MainShell()));
+  }
   void _goBack() => Navigator.of(context).pushReplacement(fadeRoute(const OnboardingScreen()));
   void _goLogin() => Navigator.of(context).pushReplacement(fadeRoute(const LoginScreen()));
   // Après création du compte : place aux questions animées de profil.
@@ -54,8 +58,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final onboarded = doc.exists && (doc.data()?['onboarded'] == true);
       if (!mounted) return;
       if (onboarded) _goHome(); else _goQuestions();
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Connexion Google impossible.');
+    } catch (e) {
+      // Affiche la vraie cause pour diagnostiquer (code Firebase/Google).
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (mounted) setState(() => _error = 'Google : ${msg.length > 120 ? msg.substring(0, 120) : msg}');
     } finally {
       if (mounted) setState(() => _loadingGoogle = false);
     }

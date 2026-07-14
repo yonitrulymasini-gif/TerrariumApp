@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
+import '../services/app_nav.dart';
 import '../utils/fade_route.dart';
 import 'main_shell.dart';
 import 'register_screen.dart';
@@ -182,6 +183,7 @@ class _ProfileQuestionsScreenState extends State<ProfileQuestionsScreen> {
     setState(() { _saving = false; _welcome = true; });
     await Future.delayed(const Duration(milliseconds: 2100));
     if (mounted) {
+      AppNav.instance.reset(); // nouveau compte → démarre sur l'Accueil
       Navigator.of(context).pushAndRemoveUntil(fadeRoute(const MainShell()), (_) => false);
     }
   }

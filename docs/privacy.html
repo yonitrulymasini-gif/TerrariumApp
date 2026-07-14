@@ -1,0 +1,343 @@
+<style>
+  :root {
+    --ground: #FBFAF7;
+    --surface: #FFFFFF;
+    --text: #1B2620;
+    --muted: #5A6B5E;
+    --faint: #8A9A8D;
+    --accent: #2C6B3E;
+    --accent-soft: #E6F0E8;
+    --hairline: #E4E7E0;
+    --shadow: 0 1px 2px rgba(30,50,40,.05), 0 8px 30px rgba(30,50,40,.06);
+    --serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0F1712;
+      --surface: #14201A;
+      --text: #E9EFEA;
+      --muted: #9AA99E;
+      --faint: #6E8074;
+      --accent: #7BC47F;
+      --accent-soft: #1B2A20;
+      --hairline: #243029;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F1712; --surface: #14201A; --text: #E9EFEA; --muted: #9AA99E;
+    --faint: #6E8074; --accent: #7BC47F; --accent-soft: #1B2A20; --hairline: #243029;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"] {
+    --ground: #FBFAF7; --surface: #FFFFFF; --text: #1B2620; --muted: #5A6B5E;
+    --faint: #8A9A8D; --accent: #2C6B3E; --accent-soft: #E6F0E8; --hairline: #E4E7E0;
+    --shadow: 0 1px 2px rgba(30,50,40,.05), 0 8px 30px rgba(30,50,40,.06);
+  }
+
+  * { box-sizing: border-box; }
+  .wrap {
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+    padding: 0 20px;
+  }
+  .col { max-width: 680px; margin: 0 auto; }
+
+  /* Header */
+  header { padding: 64px 0 34px; border-bottom: 1px solid var(--hairline); }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .leaf {
+    width: 34px; height: 34px; border-radius: 11px;
+    background: var(--accent-soft);
+    display: grid; place-items: center; flex: none;
+  }
+  .leaf svg { width: 19px; height: 19px; }
+  .brand-name { font-family: var(--serif); font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+  .brand-name b { color: var(--accent); font-weight: 600; }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(30px, 6vw, 42px);
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 26px 0 12px;
+  }
+  .lede { color: var(--muted); font-size: 17px; max-width: 60ch; margin: 0; }
+  .meta {
+    margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px 10px;
+    font-size: 12.5px; color: var(--faint);
+  }
+  .pill {
+    border: 1px solid var(--hairline); border-radius: 50px;
+    padding: 4px 11px; color: var(--muted);
+  }
+  .pill.warn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-soft); }
+
+  /* Table of contents */
+  nav.toc { margin: 30px 0 6px; }
+  nav.toc ol {
+    list-style: none; margin: 0; padding: 0;
+    columns: 2; column-gap: 30px;
+    font-size: 14px;
+  }
+  nav.toc li { margin: 0 0 9px; break-inside: avoid; }
+  nav.toc a {
+    color: var(--muted); text-decoration: none;
+    display: flex; gap: 10px; align-items: baseline;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .n { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; min-width: 16px; }
+
+  /* Sections */
+  section { padding: 40px 0; border-bottom: 1px solid var(--hairline); scroll-margin-top: 20px; }
+  section:last-of-type { border-bottom: 0; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin: 0 0 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  h2 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: 24px; line-height: 1.2; letter-spacing: -.01em;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  h3 { font-size: 15px; font-weight: 700; margin: 22px 0 6px; letter-spacing: -.005em; }
+  p { margin: 0 0 14px; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  strong { font-weight: 650; }
+  .fill { color: var(--accent); font-weight: 650; background: var(--accent-soft); padding: 0 5px; border-radius: 4px; }
+
+  ul { margin: 0 0 14px; padding: 0; list-style: none; }
+  ul li { position: relative; padding-left: 22px; margin: 0 0 9px; }
+  ul li::before {
+    content: ""; position: absolute; left: 4px; top: .68em;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  ul li strong { color: var(--text); }
+
+  /* Data / purpose table */
+  .tablewrap { overflow-x: auto; margin: 4px 0 6px; border: 1px solid var(--hairline); border-radius: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+  th, td { text-align: left; padding: 12px 14px; vertical-align: top; border-bottom: 1px solid var(--hairline); }
+  th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 700; background: var(--accent-soft); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  .basis { color: var(--muted); }
+
+  /* Callout */
+  .note {
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow);
+    margin: 18px 0; font-size: 14.5px; color: var(--muted);
+  }
+  .note strong { color: var(--text); }
+
+  /* Rights grid */
+  .rights { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 4px 0 14px; }
+  .right {
+    border: 1px solid var(--hairline); border-radius: 12px; padding: 13px 15px;
+    background: var(--surface);
+  }
+  .right b { display: block; font-size: 14px; margin-bottom: 2px; }
+  .right span { font-size: 13px; color: var(--muted); }
+
+  footer { padding: 40px 0 72px; color: var(--faint); font-size: 13px; }
+  footer .contact { color: var(--text); font-size: 15px; margin-bottom: 6px; }
+
+  @media (max-width: 560px) {
+    nav.toc ol { columns: 1; }
+    .rights { grid-template-columns: 1fr; }
+    header { padding-top: 44px; }
+  }
+</style>
+
+<div class="wrap">
+<div class="col">
+
+  <header>
+    <div class="brand">
+      <span class="leaf" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 20C4 12 10 5 20 4c0 10-7 16-15 16-1 0-1-.5-1-1z" fill="currentColor" opacity=".22"/><path d="M4 20C7 13 13 8 19 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </span>
+      <span class="brand-name">Terra<b>.</b></span>
+    </div>
+
+    <h1>Politique de confidentialité</h1>
+    <p class="lede">Comment l'application Terra collecte, utilise et protège vos données personnelles — et les droits que vous gardez sur elles.</p>
+
+    <div class="meta">
+      <span class="pill warn">Dernière mise à jour : 11 juillet 2026</span>
+      <span class="pill">Conforme au RGPD</span>
+      <span class="pill">France / Union européenne</span>
+    </div>
+
+    <nav class="toc" aria-label="Sommaire">
+      <ol>
+        <li><a href="#editeur"><span class="n">1</span> Qui est responsable</a></li>
+        <li><a href="#donnees"><span class="n">2</span> Données collectées</a></li>
+        <li><a href="#finalites"><span class="n">3</span> Utilisation &amp; base légale</a></li>
+        <li><a href="#partage"><span class="n">4</span> Partage &amp; prestataires</a></li>
+        <li><a href="#transferts"><span class="n">5</span> Transferts hors UE</a></li>
+        <li><a href="#conservation"><span class="n">6</span> Durée de conservation</a></li>
+        <li><a href="#droits"><span class="n">7</span> Vos droits</a></li>
+        <li><a href="#securite"><span class="n">8</span> Sécurité</a></li>
+        <li><a href="#mineurs"><span class="n">9</span> Mineurs</a></li>
+        <li><a href="#modifs"><span class="n">10</span> Modifications</a></li>
+        <li><a href="#contact"><span class="n">11</span> Contact</a></li>
+      </ol>
+    </nav>
+  </header>
+
+  <section id="editeur">
+    <p class="eyebrow">01</p>
+    <h2>Qui est responsable de vos données</h2>
+    <p>L'application <strong>Terra</strong> (« l'application », « nous ») est un service de suivi de terrariums connectés et de communauté autour de la terrariophilie.</p>
+    <p>Le responsable du traitement de vos données personnelles est&nbsp;: <span class="fill">[À COMPLÉTER : nom de l'éditeur — particulier ou société]</span>, joignable à l'adresse <span class="fill">[À COMPLÉTER : adresse postale]</span>.</p>
+    <p>Pour toute question relative à cette politique ou à vos données, contactez-nous à <span class="fill">[À COMPLÉTER : email de contact]</span>.</p>
+  </section>
+
+  <section id="donnees">
+    <p class="eyebrow">02</p>
+    <h2>Les données que nous collectons</h2>
+    <p>Nous ne collectons que les données nécessaires au fonctionnement de l'application.</p>
+
+    <h3>Compte et identité</h3>
+    <ul>
+      <li><strong>Adresse e-mail</strong> et <strong>nom / prénom</strong>, lors de l'inscription par e-mail, Google ou Apple.</li>
+      <li><strong>Photo de profil</strong>, si vous en ajoutez une (ou celle fournie par Google/Apple).</li>
+    </ul>
+
+    <h3>Profil</h3>
+    <ul>
+      <li>Votre <strong>prénom</strong>, votre <strong>niveau</strong> d'expérience et les <strong>types d'animaux</strong> qui vous intéressent, renseignés lors du questionnaire d'accueil.</li>
+    </ul>
+
+    <h3>Contenus que vous publiez</h3>
+    <ul>
+      <li><strong>Publications</strong> (texte et photos), <strong>commentaires</strong>, <strong>« j'aime »</strong> et <strong>scénarios partagés</strong> dans la communauté.</li>
+      <li><strong>Signalements</strong> que vous envoyez (motif choisi et précisions éventuelles), pour la modération.</li>
+    </ul>
+
+    <h3>Vos terrariums</h3>
+    <ul>
+      <li><strong>Identifiant</strong> et <strong>nom</strong> de vos boîtiers/terrariums, l'<strong>URL de votre caméra</strong> (stockée uniquement sur votre appareil).</li>
+      <li><strong>Mesures</strong> (température, humidité) remontées par vos appareils.</li>
+    </ul>
+
+    <h3>Données techniques</h3>
+    <ul>
+      <li><strong>Jeton de notification</strong> (pour vous envoyer des alertes push).</li>
+      <li>Données d'<strong>attestation d'intégrité</strong> de l'application (Firebase App Check) et journaux techniques nécessaires à la sécurité.</li>
+    </ul>
+
+    <div class="note">
+      <strong>Ce qui reste sur votre téléphone :</strong> le thème choisi et l'URL RTSP de votre caméra sont stockés <em>localement</em> et ne sont pas transmis à nos serveurs.
+    </div>
+  </section>
+
+  <section id="finalites">
+    <p class="eyebrow">03</p>
+    <h2>Comment nous utilisons vos données</h2>
+    <p>Chaque traitement repose sur une base légale au sens du RGPD.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Finalité</th><th>Données</th><th>Base légale</th></tr></thead>
+        <tbody>
+          <tr><td>Créer et gérer votre compte</td><td>E-mail, nom, profil</td><td class="basis">Exécution du contrat</td></tr>
+          <tr><td>Suivi de vos terrariums</td><td>Appareils, mesures</td><td class="basis">Exécution du contrat</td></tr>
+          <tr><td>Communauté &amp; encyclopédie</td><td>Publications, commentaires</td><td class="basis">Exécution du contrat</td></tr>
+          <tr><td>Modération des contenus</td><td>Signalements</td><td class="basis">Intérêt légitime</td></tr>
+          <tr><td>Alertes &amp; notifications</td><td>Jeton de notification</td><td class="basis">Consentement</td></tr>
+          <tr><td>Sécurité &amp; anti-abus</td><td>Données techniques</td><td class="basis">Intérêt légitime</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Nous <strong>ne vendons pas</strong> vos données et ne les utilisons pas à des fins de publicité ciblée.</p>
+  </section>
+
+  <section id="partage">
+    <p class="eyebrow">04</p>
+    <h2>Partage et prestataires</h2>
+    <p>Vos publications et votre nom d'utilisateur sont <strong>visibles publiquement</strong> dans la communauté de l'application. En dehors de cela, nous ne partageons vos données qu'avec les prestataires techniques strictement nécessaires&nbsp;:</p>
+    <ul>
+      <li><strong>Google Firebase</strong> — authentification, base de données, notifications et sécurité (hébergement de vos données de compte et de contenu).</li>
+      <li><strong>Cloudinary</strong> — hébergement des photos que vous publiez.</li>
+      <li><strong>Google / Apple</strong> — uniquement si vous choisissez de vous connecter via leur service.</li>
+      <li><strong>iNaturalist</strong> — pour afficher des photos d'espèces&nbsp;: seule la donnée « nom scientifique » est envoyée, <strong>aucune donnée personnelle</strong>.</li>
+    </ul>
+    <p>Ces prestataires agissent comme sous-traitants et sont tenus de protéger vos données.</p>
+  </section>
+
+  <section id="transferts">
+    <p class="eyebrow">05</p>
+    <h2>Transferts hors Union européenne</h2>
+    <p>Certains prestataires (Google, Cloudinary) peuvent héberger ou traiter des données en dehors de l'Union européenne, notamment aux États-Unis. Ces transferts sont encadrés par des garanties appropriées prévues par le RGPD (clauses contractuelles types de la Commission européenne).</p>
+  </section>
+
+  <section id="conservation">
+    <p class="eyebrow">06</p>
+    <h2>Durée de conservation</h2>
+    <ul>
+      <li>Vos données de <strong>compte et de profil</strong> sont conservées tant que votre compte existe.</li>
+      <li>Vos <strong>publications et contenus</strong> restent visibles jusqu'à ce que vous les supprimiez ou que vous supprimiez votre compte.</li>
+      <li>À la <strong>suppression de votre compte</strong>, vos données personnelles sont effacées ou anonymisées dans un délai raisonnable, sauf obligation légale de conservation.</li>
+    </ul>
+  </section>
+
+  <section id="droits">
+    <p class="eyebrow">07</p>
+    <h2>Vos droits</h2>
+    <p>Conformément au RGPD, vous disposez à tout moment des droits suivants sur vos données&nbsp;:</p>
+    <div class="rights">
+      <div class="right"><b>Accès</b><span>Obtenir une copie de vos données.</span></div>
+      <div class="right"><b>Rectification</b><span>Corriger des données inexactes.</span></div>
+      <div class="right"><b>Effacement</b><span>Demander la suppression de vos données.</span></div>
+      <div class="right"><b>Limitation</b><span>Restreindre certains traitements.</span></div>
+      <div class="right"><b>Opposition</b><span>Vous opposer à un traitement.</span></div>
+      <div class="right"><b>Portabilité</b><span>Récupérer vos données dans un format lisible.</span></div>
+    </div>
+    <p>Pour exercer ces droits, écrivez-nous à <span class="fill">[À COMPLÉTER : email de contact]</span>. Vous pouvez aussi supprimer votre compte directement depuis l'application.</p>
+  </section>
+
+  <section id="securite">
+    <p class="eyebrow">08</p>
+    <h2>Sécurité</h2>
+    <p>Nous mettons en œuvre des mesures techniques pour protéger vos données&nbsp;: chiffrement des échanges (HTTPS), règles d'accès strictes sur la base de données, et attestation d'intégrité de l'application (App Check) pour empêcher les accès automatisés non autorisés. Aucun système n'étant infaillible, nous ne pouvons garantir une sécurité absolue.</p>
+  </section>
+
+  <section id="mineurs">
+    <p class="eyebrow">09</p>
+    <h2>Mineurs</h2>
+    <p>L'application n'est pas destinée aux enfants de moins de <span class="fill">[À COMPLÉTER : 15 ans recommandé en France]</span>. Si vous êtes mineur, utilisez l'application avec l'accord de vos parents ou tuteurs. Si nous apprenons qu'un compte a été créé par un enfant en deçà de cet âge sans autorisation, nous le supprimerons.</p>
+  </section>
+
+  <section id="modifs">
+    <p class="eyebrow">10</p>
+    <h2>Modifications de cette politique</h2>
+    <p>Nous pouvons mettre à jour cette politique de confidentialité. En cas de changement important, nous vous en informerons dans l'application. La date de dernière mise à jour figure en haut de cette page.</p>
+  </section>
+
+  <section id="contact">
+    <p class="eyebrow">11</p>
+    <h2>Contact et réclamation</h2>
+    <p>Pour toute question sur vos données personnelles&nbsp;:</p>
+    <p><span class="fill">[À COMPLÉTER : email de contact]</span></p>
+    <p>Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation auprès de la <strong>CNIL</strong> (Commission nationale de l'informatique et des libertés) — <a href="https://www.cnil.fr" target="_blank" rel="noopener">www.cnil.fr</a>.</p>
+  </section>
+
+  <footer>
+    <p class="contact">Terra — Terrarium connecté</p>
+    <p>Cette politique de confidentialité constitue un modèle à compléter et à faire vérifier avant publication. Les champs marqués <span class="fill">[À COMPLÉTER]</span> doivent être renseignés.</p>
+  </footer>
+
+</div>
+</div>

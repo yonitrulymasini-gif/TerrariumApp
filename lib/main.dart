@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
@@ -14,6 +16,8 @@ import 'services/device_service.dart';
 import 'services/notification_service.dart';
 import 'services/camera_service.dart';
 import 'services/theme_service.dart';
+import 'services/favorites_service.dart';
+import 'services/admin_service.dart';
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 
@@ -24,8 +28,31 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Firebase App Check : atteste que les requêtes viennent bien de l'app.
+  // En debug → provider "debug" (enregistre le token affiché dans la console
+  // Firebase → App Check). En release → Play Integrity (Android) / DeviceCheck
+  // (iOS). Rien n'est bloqué tant que l'« enforcement » n'est pas activé côté
+  // console : cette étape est donc sûre à déployer.
+  if (!kIsWeb) {
+    try {
+      await FirebaseAppCheck.instance.activate(
+        providerAndroid: kDebugMode
+            ? const AndroidDebugProvider()
+            : const AndroidPlayIntegrityProvider(),
+        providerApple: kDebugMode
+            ? const AppleDebugProvider()
+            : const AppleDeviceCheckProvider(),
+      );
+    } catch (_) {
+      // App Check indisponible (émulateur non configuré…) : on n'empêche pas
+      // le démarrage de l'app.
+    }
+  }
+
   await ThemeService.instance.load();
   await CameraService.instance.load();
+  await FavoritesService.instance.load();
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -89,6 +116,8 @@ class _TerraAppState extends State<TerraApp> {
     DeepLinkService.listen(_navigatorKey);
     // Démarre le stream des devices dès que l'auth change
     FirebaseAuth.instance.authStateChanges().listen((user) {
+      // Recharge le rôle admin à chaque changement d'auth (login/logout).
+      AdminService.instance.load();
       if (user != null) {
         DeviceService.instance.startListening();
         // Notifs uniquement si l'user a déjà un device.

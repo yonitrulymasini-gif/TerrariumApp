@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/device_service.dart';
 import '../utils/fade_route.dart';
+import '../widgets/terra_confirm_dialog.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
 
@@ -53,6 +54,21 @@ class _MesAppareilsScreenState extends State<MesAppareilsScreen> {
     );
     if (confirm == true) {
       await DeviceService.instance.removeDevice(device.serialId);
+    }
+  }
+
+  Future<void> _renameDevice(TerraDevice device) async {
+    final name = await showTerraInputDialog(
+      context,
+      icon: Icons.eco_outlined,
+      title: 'Renommer le terrarium',
+      message: 'Choisis un nouveau titre pour ce terrarium.',
+      hint: 'Nom du terrarium',
+      initialValue: device.name,
+      confirmLabel: 'Enregistrer',
+    );
+    if (name != null && name.trim().isNotEmpty) {
+      await DeviceService.instance.setDeviceName(device.serialId, name.trim());
     }
   }
 
@@ -133,6 +149,18 @@ class _MesAppareilsScreenState extends State<MesAppareilsScreen> {
                                 style: TextStyle(fontSize: 11, color: AppColors.textHint)),
                           ]),
                         ])),
+                        GestureDetector(
+                          onTap: () => _renameDevice(d),
+                          child: Container(
+                            width: 36, height: 36,
+                            decoration: BoxDecoration(
+                              color: ThemeService.instance.colors.primary.withValues(alpha: 0.10),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.edit_outlined, size: 17, color: ThemeService.instance.colors.primary),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () => _removeDevice(d),
                           child: Container(

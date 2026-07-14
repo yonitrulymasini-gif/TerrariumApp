@@ -21,6 +21,14 @@ class AppNav extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Remet la navigation sur l'Accueil (onglet 0). À appeler à l'entrée dans
+  /// l'app après connexion/inscription et à la déconnexion, car ce singleton
+  /// conserve l'onglet pour toute la durée de vie du process.
+  void reset() {
+    pendingScenario = null;
+    _tab = 0;
+  }
+
   /// Bascule sur l'onglet Communauté avec un scénario à partager.
   void shareScenario(TerraScenario s) {
     pendingScenario = s;

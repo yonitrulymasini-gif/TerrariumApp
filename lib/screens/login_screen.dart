@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/app_theme.dart';
 import '../widgets/terra_button.dart';
 import '../services/auth_service.dart';
+import '../services/app_nav.dart';
 import '../utils/fade_route.dart';
 import 'main_shell.dart';
 import 'onboarding_screen.dart';
@@ -36,7 +37,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _goHome() => Navigator.of(context).pushReplacement(fadeRoute(const MainShell()));
+  void _goHome() {
+    AppNav.instance.reset(); // nouvelle session → démarre sur l'Accueil
+    Navigator.of(context).pushReplacement(fadeRoute(const MainShell()));
+  }
   void _goBack() => Navigator.of(context).pushReplacement(fadeRoute(const OnboardingScreen()));
 
   Future<void> _signInGoogle() async {
@@ -73,9 +77,30 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       if (mounted) _goHome();
     } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(e.message ?? 'Erreur de connexion');
+      if (mounted) _showError(_frAuthError(e));
     } finally {
       if (mounted) setState(() => _loadingEmail = false);
+    }
+  }
+
+  /// Traduit les erreurs Firebase Auth en messages clairs en français.
+  String _frAuthError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+      case 'user-not-found':
+        return 'Email ou mot de passe incorrect. Si tu t\'es inscrit avec Google, '
+            'utilise « Continuer avec Google ».';
+      case 'invalid-email':
+        return 'Adresse email invalide.';
+      case 'user-disabled':
+        return 'Ce compte a été désactivé.';
+      case 'too-many-requests':
+        return 'Trop de tentatives. Réessaie dans quelques minutes.';
+      case 'network-request-failed':
+        return 'Pas de connexion internet.';
+      default:
+        return e.message ?? 'Erreur de connexion';
     }
   }
 

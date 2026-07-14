@@ -3,7 +3,28 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../theme/app_theme.dart';
 
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({super.key});
+  final String promptText;
+  final String? Function(String raw)? extractor;
+  final String invalidMessage;
+
+  const QrScannerScreen({
+    super.key,
+    this.promptText = 'Scanne le QR code\nà l\'intérieur de ta boîte Terra',
+    this.extractor,
+    this.invalidMessage = 'QR code invalide',
+  });
+
+  /// Extrait une URL RTSP d'un QR code (URL brute ou lien avec paramètre rtsp/url).
+  static String? extractCameraUrl(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('rtsp://') || trimmed.startsWith('rtsps://')) return trimmed;
+    try {
+      final uri = Uri.parse(trimmed);
+      final url = uri.queryParameters['rtsp'] ?? uri.queryParameters['url'];
+      if (url != null && (url.startsWith('rtsp://') || url.startsWith('rtsps://'))) return url;
+    } catch (_) {}
+    return null;
+  }
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -24,15 +45,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     final raw = capture.barcodes.firstOrNull?.rawValue;
     if (raw == null) return;
 
-    final deviceId = _extractDeviceId(raw);
-    if (deviceId == null) {
-      _showError('QR code invalide');
+    final value = (widget.extractor ?? _extractDeviceId)(raw);
+    if (value == null) {
+      _showError(widget.invalidMessage);
       return;
     }
 
     _scanned = true;
     _ctrl.stop();
-    Navigator.of(context).pop(deviceId);
+    Navigator.of(context).pop(value);
   }
 
   String? _extractDeviceId(String raw) {
@@ -111,9 +132,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             // Texte sous le cadre
             const SizedBox(height: 260), // hauteur approx du cadre
             const SizedBox(height: 24),
-            const Text('Scanne le QR code\nà l\'intérieur de ta boîte Terra',
+            Text(widget.promptText,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 15, height: 1.6)),
+                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.6)),
             const Spacer(),
           ]),
         ),

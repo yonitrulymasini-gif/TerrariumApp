@@ -24,6 +24,7 @@ class ReptileSpecies {
   final String sexingNote;
   final String? imageUrl;
   final bool professional; // nécessite un certificat de capacité
+  final bool venomous; // espèce venimeuse
 
   const ReptileSpecies({
     required this.id,
@@ -45,6 +46,7 @@ class ReptileSpecies {
     required this.femaleTraits,
     required this.sexingNote,
     this.professional = false,
+    this.venomous = false,
     this.imageUrl,
   });
 
@@ -68,6 +70,7 @@ class ReptileSpecies {
         femaleTraits: List<String>.from(m['femaleTraits'] ?? []),
         sexingNote: m['sexingNote'] ?? '',
         professional: m['professional'] ?? false,
+        venomous: m['venomous'] ?? false,
         imageUrl: m['imageUrl'],
       );
 
@@ -90,6 +93,7 @@ class ReptileSpecies {
         'femaleTraits': femaleTraits,
         'sexingNote': sexingNote,
         'professional': professional,
+        'venomous': venomous,
         if (imageUrl != null) 'imageUrl': imageUrl,
       };
 }
@@ -412,6 +416,7 @@ class SpeciesService extends ChangeNotifier {
       ],
       sexingNote: 'Sexage réservé à un vétérinaire / structure agréée.',
       professional: true,
+      venomous: true,
     ),
     ReptileSpecies(
       id: 'varan-malais',
@@ -450,77 +455,78 @@ class SpeciesService extends ChangeNotifier {
   // ── Fiches "squelette" : nom + catégorie + niveau, à compléter avec Théo ──
   // Les photos arrivent automatiquement d'iNaturalist (nom scientifique).
   // (id, nom commun, nom scientifique, catégorie, niveau, certificat requis)
-  static const _stubData = <(String, String, String, String, String, bool)>[
+  // (id, nom commun, nom scientifique, catégorie, niveau, certificat requis, venimeux)
+  static const _stubData = <(String, String, String, String, String, bool, bool)>[
     // Lézards
-    ('gecko-tokay', 'Gecko tokay', 'Gekko gecko', 'Lézard', 'Intermédiaire', false),
-    ('gecko-gargouille', 'Gecko gargouille', 'Rhacodactylus auriculatus', 'Lézard', 'Débutant', false),
-    ('gecko-leachianus', 'Gecko géant de Nouvelle-Calédonie', 'Rhacodactylus leachianus', 'Lézard', 'Intermédiaire', false),
-    ('gecko-chahoua', 'Gecko chahoua', 'Mniarogekko chahoua', 'Lézard', 'Intermédiaire', false),
-    ('phelsuma-grandis', 'Gecko diurne géant de Madagascar', 'Phelsuma grandis', 'Lézard', 'Intermédiaire', false),
-    ('phelsuma-laticauda', 'Gecko poussière d\'or', 'Phelsuma laticauda', 'Lézard', 'Intermédiaire', false),
-    ('gecko-queue-grasse', 'Gecko à queue grasse', 'Hemitheconyx caudicinctus', 'Lézard', 'Débutant', false),
-    ('gecko-ligne-blanche', 'Gecko à ligne blanche', 'Gekko vittatus', 'Lézard', 'Intermédiaire', false),
-    ('uroplatus-phantasticus', 'Gecko satanique à queue de feuille', 'Uroplatus phantasticus', 'Lézard', 'Avancé', false),
-    ('pogona-nain', 'Pogona nain', 'Pogona henrylawsoni', 'Lézard', 'Débutant', false),
-    ('dragon-eau-chinois', 'Dragon d\'eau chinois', 'Physignathus cocincinus', 'Lézard', 'Intermédiaire', false),
-    ('fouette-queue-geyri', 'Fouette-queue du Sahara', 'Uromastyx geyri', 'Lézard', 'Intermédiaire', false),
-    ('scinque-langue-bleue', 'Scinque à langue bleue', 'Tiliqua scincoides', 'Lézard', 'Débutant', false),
-    ('scinque-feu', 'Scinque de feu', 'Lepidothyris fernandi', 'Lézard', 'Intermédiaire', false),
-    ('anolis-vert', 'Anolis vert', 'Anolis carolinensis', 'Lézard', 'Débutant', false),
-    ('basilic-vert', 'Basilic vert', 'Basiliscus plumifrons', 'Lézard', 'Avancé', false),
-    ('cameleon-casque', 'Caméléon casqué du Yémen', 'Chamaeleo calyptratus', 'Lézard', 'Intermédiaire', false),
-    ('cameleon-panthere', 'Caméléon panthère', 'Furcifer pardalis', 'Lézard', 'Avancé', false),
-    ('iguane-vert', 'Iguane vert', 'Iguana iguana', 'Lézard', 'Avancé', true),
-    ('varan-savanes', 'Varan des savanes', 'Varanus exanthematicus', 'Lézard', 'Avancé', false),
-    ('lezard-collerette', 'Lézard à collerette', 'Chlamydosaurus kingii', 'Lézard', 'Avancé', false),
-    ('teju-argentin', 'Téju noir et blanc d\'Argentine', 'Salvator merianae', 'Lézard', 'Avancé', false),
+    ('gecko-tokay', 'Gecko tokay', 'Gekko gecko', 'Lézard', 'Intermédiaire', false, false),
+    ('gecko-gargouille', 'Gecko gargouille', 'Rhacodactylus auriculatus', 'Lézard', 'Débutant', false, false),
+    ('gecko-leachianus', 'Gecko géant de Nouvelle-Calédonie', 'Rhacodactylus leachianus', 'Lézard', 'Intermédiaire', false, false),
+    ('gecko-chahoua', 'Gecko chahoua', 'Mniarogekko chahoua', 'Lézard', 'Intermédiaire', false, false),
+    ('phelsuma-grandis', 'Gecko diurne géant de Madagascar', 'Phelsuma grandis', 'Lézard', 'Intermédiaire', false, false),
+    ('phelsuma-laticauda', 'Gecko poussière d\'or', 'Phelsuma laticauda', 'Lézard', 'Intermédiaire', false, false),
+    ('gecko-queue-grasse', 'Gecko à queue grasse', 'Hemitheconyx caudicinctus', 'Lézard', 'Débutant', false, false),
+    ('gecko-ligne-blanche', 'Gecko à ligne blanche', 'Gekko vittatus', 'Lézard', 'Intermédiaire', false, false),
+    ('uroplatus-phantasticus', 'Gecko satanique à queue de feuille', 'Uroplatus phantasticus', 'Lézard', 'Avancé', false, false),
+    ('pogona-nain', 'Pogona nain', 'Pogona henrylawsoni', 'Lézard', 'Débutant', false, false),
+    ('dragon-eau-chinois', 'Dragon d\'eau chinois', 'Physignathus cocincinus', 'Lézard', 'Intermédiaire', false, false),
+    ('fouette-queue-geyri', 'Fouette-queue du Sahara', 'Uromastyx geyri', 'Lézard', 'Intermédiaire', false, false),
+    ('scinque-langue-bleue', 'Scinque à langue bleue', 'Tiliqua scincoides', 'Lézard', 'Débutant', false, false),
+    ('scinque-feu', 'Scinque de feu', 'Lepidothyris fernandi', 'Lézard', 'Intermédiaire', false, false),
+    ('anolis-vert', 'Anolis vert', 'Anolis carolinensis', 'Lézard', 'Débutant', false, false),
+    ('basilic-vert', 'Basilic vert', 'Basiliscus plumifrons', 'Lézard', 'Avancé', false, false),
+    ('cameleon-casque', 'Caméléon casqué du Yémen', 'Chamaeleo calyptratus', 'Lézard', 'Intermédiaire', false, false),
+    ('cameleon-panthere', 'Caméléon panthère', 'Furcifer pardalis', 'Lézard', 'Avancé', false, false),
+    ('iguane-vert', 'Iguane vert', 'Iguana iguana', 'Lézard', 'Avancé', true, false),
+    ('varan-savanes', 'Varan des savanes', 'Varanus exanthematicus', 'Lézard', 'Avancé', false, false),
+    ('lezard-collerette', 'Lézard à collerette', 'Chlamydosaurus kingii', 'Lézard', 'Avancé', false, false),
+    ('teju-argentin', 'Téju noir et blanc d\'Argentine', 'Salvator merianae', 'Lézard', 'Avancé', false, false),
 
     // Serpents
-    ('serpent-roi-californie', 'Serpent roi de Californie', 'Lampropeltis californiae', 'Serpent', 'Débutant', false),
-    ('serpent-lait', 'Serpent lait', 'Lampropeltis triangulum', 'Serpent', 'Débutant', false),
-    ('serpent-groin', 'Serpent à groin de l\'Ouest', 'Heterodon nasicus', 'Serpent', 'Débutant', false),
-    ('python-tachete', 'Python tacheté', 'Antaresia maculosa', 'Serpent', 'Débutant', false),
-    ('python-children', 'Python de Children', 'Antaresia childreni', 'Serpent', 'Débutant', false),
-    ('serpent-maisons', 'Serpent des maisons africain', 'Boaedon fuliginosus', 'Serpent', 'Débutant', false),
-    ('boa-sables', 'Boa des sables du Kenya', 'Eryx colubrinus', 'Serpent', 'Débutant', false),
-    ('serpent-ratier-noir', 'Serpent ratier noir', 'Pantherophis obsoletus', 'Serpent', 'Débutant', false),
-    ('python-tapis', 'Python tapis', 'Morelia spilota', 'Serpent', 'Intermédiaire', false),
-    ('boa-arc-en-ciel', 'Boa arc-en-ciel du Brésil', 'Epicrates cenchria', 'Serpent', 'Intermédiaire', false),
-    ('serpent-pins', 'Serpent des pins', 'Pituophis catenifer', 'Serpent', 'Intermédiaire', false),
-    ('python-vert', 'Python vert arboricole', 'Morelia viridis', 'Serpent', 'Avancé', false),
-    ('boa-constricteur', 'Boa constricteur', 'Boa constrictor', 'Serpent', 'Avancé', false),
-    ('python-birman', 'Python birman', 'Python bivittatus', 'Serpent', 'Avancé', true),
-    ('python-seba', 'Python de Seba', 'Python sebae', 'Serpent', 'Avancé', true),
-    ('anaconda-vert', 'Anaconda vert', 'Eunectes murinus', 'Serpent', 'Avancé', true),
-    ('crotale-diamantin', 'Crotale diamantin de l\'Ouest', 'Crotalus atrox', 'Serpent', 'Avancé', true),
-    ('cobra-royal', 'Cobra royal', 'Ophiophagus hannah', 'Serpent', 'Avancé', true),
+    ('serpent-roi-californie', 'Serpent roi de Californie', 'Lampropeltis californiae', 'Serpent', 'Débutant', false, false),
+    ('serpent-lait', 'Serpent lait', 'Lampropeltis triangulum', 'Serpent', 'Débutant', false, false),
+    ('serpent-groin', 'Serpent à groin de l\'Ouest', 'Heterodon nasicus', 'Serpent', 'Débutant', false, false),
+    ('python-tachete', 'Python tacheté', 'Antaresia maculosa', 'Serpent', 'Débutant', false, false),
+    ('python-children', 'Python de Children', 'Antaresia childreni', 'Serpent', 'Débutant', false, false),
+    ('serpent-maisons', 'Serpent des maisons africain', 'Boaedon fuliginosus', 'Serpent', 'Débutant', false, false),
+    ('boa-sables', 'Boa des sables du Kenya', 'Eryx colubrinus', 'Serpent', 'Débutant', false, false),
+    ('serpent-ratier-noir', 'Serpent ratier noir', 'Pantherophis obsoletus', 'Serpent', 'Débutant', false, false),
+    ('python-tapis', 'Python tapis', 'Morelia spilota', 'Serpent', 'Intermédiaire', false, false),
+    ('boa-arc-en-ciel', 'Boa arc-en-ciel du Brésil', 'Epicrates cenchria', 'Serpent', 'Intermédiaire', false, false),
+    ('serpent-pins', 'Serpent des pins', 'Pituophis catenifer', 'Serpent', 'Intermédiaire', false, false),
+    ('python-vert', 'Python vert arboricole', 'Morelia viridis', 'Serpent', 'Avancé', false, false),
+    ('boa-constricteur', 'Boa constricteur', 'Boa constrictor', 'Serpent', 'Avancé', false, false),
+    ('python-birman', 'Python birman', 'Python bivittatus', 'Serpent', 'Avancé', true, false),
+    ('python-seba', 'Python de Seba', 'Python sebae', 'Serpent', 'Avancé', true, false),
+    ('anaconda-vert', 'Anaconda vert', 'Eunectes murinus', 'Serpent', 'Avancé', true, false),
+    ('crotale-diamantin', 'Crotale diamantin de l\'Ouest', 'Crotalus atrox', 'Serpent', 'Avancé', true, true),
+    ('cobra-royal', 'Cobra royal', 'Ophiophagus hannah', 'Serpent', 'Avancé', true, true),
 
     // Tortues
-    ('tortue-hermann', 'Tortue d\'Hermann', 'Testudo hermanni', 'Tortue', 'Intermédiaire', false),
-    ('tortue-grecque', 'Tortue grecque', 'Testudo graeca', 'Tortue', 'Intermédiaire', false),
-    ('tortue-leopard', 'Tortue léopard', 'Stigmochelys pardalis', 'Tortue', 'Avancé', false),
-    ('tortue-sillonnee', 'Tortue sillonnée', 'Centrochelys sulcata', 'Tortue', 'Avancé', false),
-    ('tortue-charbonniere', 'Tortue charbonnière à pattes rouges', 'Chelonoidis carbonarius', 'Tortue', 'Intermédiaire', false),
-    ('tortue-etoilee-inde', 'Tortue étoilée d\'Inde', 'Geochelone elegans', 'Tortue', 'Avancé', false),
-    ('tortue-musquee', 'Tortue musquée commune', 'Sternotherus odoratus', 'Tortue', 'Débutant', false),
-    ('pelomeduse', 'Pélomeduse roussâtre', 'Pelomedusa subrufa', 'Tortue', 'Intermédiaire', false),
+    ('tortue-hermann', 'Tortue d\'Hermann', 'Testudo hermanni', 'Tortue', 'Intermédiaire', false, false),
+    ('tortue-grecque', 'Tortue grecque', 'Testudo graeca', 'Tortue', 'Intermédiaire', false, false),
+    ('tortue-leopard', 'Tortue léopard', 'Stigmochelys pardalis', 'Tortue', 'Avancé', false, false),
+    ('tortue-sillonnee', 'Tortue sillonnée', 'Centrochelys sulcata', 'Tortue', 'Avancé', false, false),
+    ('tortue-charbonniere', 'Tortue charbonnière à pattes rouges', 'Chelonoidis carbonarius', 'Tortue', 'Intermédiaire', false, false),
+    ('tortue-etoilee-inde', 'Tortue étoilée d\'Inde', 'Geochelone elegans', 'Tortue', 'Avancé', false, false),
+    ('tortue-musquee', 'Tortue musquée commune', 'Sternotherus odoratus', 'Tortue', 'Débutant', false, false),
+    ('pelomeduse', 'Pélomeduse roussâtre', 'Pelomedusa subrufa', 'Tortue', 'Intermédiaire', false, false),
 
     // Araignées (mygales)
-    ('mygale-rose-chili', 'Mygale rose du Chili', 'Grammostola rosea', 'Araignée', 'Débutant', false),
-    ('mygale-frisee', 'Mygale frisée', 'Tliltocatl albopilosus', 'Araignée', 'Débutant', false),
-    ('mygale-genoux-rouges', 'Mygale à genoux rouges du Mexique', 'Brachypelma hamorii', 'Araignée', 'Débutant', false),
-    ('mygale-bleue', 'Mygale bleue-verte', 'Chromatopelma cyaneopubescens', 'Araignée', 'Intermédiaire', false),
-    ('mygale-goliath', 'Mygale Goliath', 'Theraphosa blondi', 'Araignée', 'Avancé', false),
-    ('mygale-ornementale', 'Mygale ornementale indienne', 'Poecilotheria regalis', 'Araignée', 'Avancé', false),
+    ('mygale-rose-chili', 'Mygale rose du Chili', 'Grammostola rosea', 'Araignée', 'Débutant', false, false),
+    ('mygale-frisee', 'Mygale frisée', 'Tliltocatl albopilosus', 'Araignée', 'Débutant', false, false),
+    ('mygale-genoux-rouges', 'Mygale à genoux rouges du Mexique', 'Brachypelma hamorii', 'Araignée', 'Débutant', false, false),
+    ('mygale-bleue', 'Mygale bleue-verte', 'Chromatopelma cyaneopubescens', 'Araignée', 'Intermédiaire', false, false),
+    ('mygale-goliath', 'Mygale Goliath', 'Theraphosa blondi', 'Araignée', 'Avancé', false, false),
+    ('mygale-ornementale', 'Mygale ornementale indienne', 'Poecilotheria regalis', 'Araignée', 'Avancé', false, false),
 
     // Amphibiens
-    ('grenouille-pacman', 'Grenouille Pacman', 'Ceratophrys ornata', 'Amphibien', 'Débutant', false),
-    ('rainette-white', 'Rainette de White', 'Ranoidea caerulea', 'Amphibien', 'Débutant', false),
-    ('dendrobate-bleue', 'Dendrobate bleue', 'Dendrobates tinctorius', 'Amphibien', 'Avancé', false),
-    ('axolotl', 'Axolotl', 'Ambystoma mexicanum', 'Amphibien', 'Débutant', false),
+    ('grenouille-pacman', 'Grenouille Pacman', 'Ceratophrys ornata', 'Amphibien', 'Débutant', false, false),
+    ('rainette-white', 'Rainette de White', 'Ranoidea caerulea', 'Amphibien', 'Débutant', false, false),
+    ('dendrobate-bleue', 'Dendrobate bleue', 'Dendrobates tinctorius', 'Amphibien', 'Avancé', false, false),
+    ('axolotl', 'Axolotl', 'Ambystoma mexicanum', 'Amphibien', 'Débutant', false, false),
 
     // Autres pensionnaires de terrarium
-    ('scorpion-empereur', 'Scorpion empereur', 'Pandinus imperator', 'Autre', 'Intermédiaire', false),
+    ('scorpion-empereur', 'Scorpion empereur', 'Pandinus imperator', 'Autre', 'Intermédiaire', false, false),
   ];
 
   static final List<ReptileSpecies> _stubs = [
@@ -540,6 +546,7 @@ class SpeciesService extends ChangeNotifier {
         },
         difficulty: s.$5,
         professional: s.$6,
+        venomous: s.$7,
         adultSize: '—', lifespan: '—', diet: '—', tempRange: '—',
         humidityRange: '—', terrarium: '—', origin: '—', temperament: '—',
         description: '', maleTraits: [], femaleTraits: [], sexingNote: '',

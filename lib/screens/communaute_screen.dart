@@ -11,9 +11,16 @@ import '../services/scenario_service.dart';
 import '../services/app_nav.dart';
 import '../services/species_service.dart';
 import '../services/device_service.dart';
+import '../services/admin_service.dart';
+import '../services/favorites_service.dart';
+import '../widgets/terra_toast.dart';
+import '../widgets/terra_confirm_dialog.dart';
+import '../widgets/fullscreen_image.dart';
 import '../utils/fade_route.dart';
 import 'species_detail_screen.dart';
 import 'species_add_screen.dart';
+import 'comparator_screen.dart';
+import 'expert_profile_screen.dart';
 import 'pairing_screen.dart';
 
 class CommunauteScreen extends StatefulWidget {
@@ -24,15 +31,16 @@ class CommunauteScreen extends StatefulWidget {
 
 class _CommunauteScreenState extends State<CommunauteScreen> {
   int _section = 0; // 0 = Général, 1 = Scénarios, 2 = Reptiles
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _sheetOpen = false;
   final _speciesCtrl = TextEditingController();
   String _speciesQuery = '';
-  String? _speciesCatFilter; // null = Tous
+  SpeciesFilter _filter = const SpeciesFilter();
+  bool _favoritesOnly = false;
 
   // Préférences issues du questionnaire (pour « Suggéré pour toi »)
   String? _userNiveau;
   List<String> _userAnimals = [];
-
-  static const _catFilters = ['Lézard', 'Serpent', 'Araignée', 'Tortue', 'Amphibien', 'Autre'];
 
   @override
   void initState() {
@@ -42,6 +50,8 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
     // Fiches ajoutées via l'app (Firestore) : écoute temps réel.
     SpeciesService.instance.init();
     SpeciesService.instance.addListener(_onSpeciesChange);
+    FavoritesService.instance.addListener(_onSpeciesChange);
+    AdminService.instance.addListener(_onSpeciesChange);
     // Au cas où un scénario serait déjà en attente à la création
     WidgetsBinding.instance.addPostFrameCallback((_) => _onNav());
   }
@@ -68,6 +78,8 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
   void dispose() {
     AppNav.instance.removeListener(_onNav);
     SpeciesService.instance.removeListener(_onSpeciesChange);
+    FavoritesService.instance.removeListener(_onSpeciesChange);
+    AdminService.instance.removeListener(_onSpeciesChange);
     _speciesCtrl.dispose();
     super.dispose();
   }
@@ -86,13 +98,18 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
   @override
   Widget build(BuildContext context) {
     var speciesResults = SpeciesService.search(_speciesQuery);
-    if (_speciesCatFilter != null) {
-      speciesResults = speciesResults.where((s) => s.category == _speciesCatFilter).toList();
+    if (!_filter.isEmpty) {
+      speciesResults = speciesResults.where(_filter.matches).toList();
+    }
+    if (_favoritesOnly) {
+      speciesResults = speciesResults.where((s) => FavoritesService.instance.isFavorite(s.id)).toList();
     }
     final suggestions = SpeciesService.suggestFor(niveau: _userNiveau, animaux: _userAnimals);
-    // Suggestions visibles seulement en vue "neutre" (pas de recherche/filtre).
-    final showSuggestions = suggestions.isNotEmpty && _speciesQuery.trim().isEmpty && _speciesCatFilter == null;
+    // « Suggéré pour toi » reste visible pendant la recherche ; on ne le masque
+    // que pour les vues ciblées (filtre actif ou mode Favoris).
+    final showSuggestions = suggestions.isNotEmpty && _filter.isEmpty && !_favoritesOnly;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: CustomScrollView(
@@ -105,21 +122,7 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
                   const SizedBox(height: 6),
                   Text('Explore', style: AppTextStyles.serif28),
                 ]),
-                if (_section == 0)
-                  GestureDetector(
-                    onTap: () => _showNewPost(context),
-                    child: Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle, color: ThemeService.instance.colors.primary,
-                        boxShadow: [BoxShadow(color: ThemeService.instance.colors.primary.withValues(alpha: 0.3),
-                            blurRadius: 16, offset: const Offset(0, 4))],
-                      ),
-                      child: Icon(Icons.add, color: ThemeService.instance.colors.bg, size: 22),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 44),
+                const SizedBox(width: 44),
               ]),
             )),
 
@@ -136,7 +139,7 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
                 // ignore: prefer_const_constructors
-                child: _ExpertCard(),
+                child: _ExpertCarousel(),
               )),
 
               // ── Suggéré pour toi (selon le questionnaire) ────────────────
@@ -187,48 +190,114 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
                       ),
                     ),
                   )),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(fadeRoute(const SpeciesAddScreen())),
-                    child: Container(
-                      width: 48, height: 48,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: ThemeService.instance.colors.border),
-                        color: ThemeService.instance.colors.card,
+                  if (AdminService.instance.isAdmin) ...[
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(fadeRoute(const SpeciesAddScreen())),
+                      child: Container(
+                        width: 48, height: 48,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: ThemeService.instance.colors.border),
+                          color: ThemeService.instance.colors.card,
+                        ),
+                        child: Icon(Icons.add, color: ThemeService.instance.colors.primary, size: 22),
                       ),
-                      child: Icon(Icons.add, color: ThemeService.instance.colors.primary, size: 22),
                     ),
-                  ),
+                  ],
                 ]),
               )),
 
-              // ── Filtre par catégorie ────────────────────────────────────
+              // ── Bouton Filtres ──────────────────────────────────────────
               SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: SizedBox(height: 36, child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  children: [
-                    _CatChip(label: 'Tous', selected: _speciesCatFilter == null,
-                        onTap: () => setState(() => _speciesCatFilter = null)),
-                    for (final cat in _catFilters) ...[
-                      const SizedBox(width: 8),
-                      _CatChip(label: cat, selected: _speciesCatFilter == cat,
-                          onTap: () => setState(() => _speciesCatFilter = cat)),
-                    ],
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(children: [
+                  Expanded(child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(children: [
+                  _FilterButton(
+                    active: !_filter.isEmpty,
+                    count: _filter.count,
+                    onTap: _openFilterSheet,
+                  ),
+                  const SizedBox(width: 10),
+                  // Favoris
+                  Builder(builder: (context) {
+                    final c = ThemeService.instance.colors;
+                    return GestureDetector(
+                      onTap: () => setState(() => _favoritesOnly = !_favoritesOnly),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _favoritesOnly ? AppColors.red.withValues(alpha: 0.12) : c.card,
+                          borderRadius: BorderRadius.circular(50),
+                          border: Border.all(color: _favoritesOnly ? AppColors.red : c.border),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(_favoritesOnly ? Icons.favorite : Icons.favorite_border,
+                              size: 16, color: _favoritesOnly ? AppColors.red : c.textSecondary),
+                          const SizedBox(width: 7),
+                          Text('Favoris', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                              color: _favoritesOnly ? AppColors.red : c.textSecondary)),
+                        ]),
+                      ),
+                    );
+                  }),
+                  const SizedBox(width: 10),
+                  // Comparateur
+                  Builder(builder: (context) {
+                    final c = ThemeService.instance.colors;
+                    return GestureDetector(
+                      onTap: () => Navigator.of(context).push(fadeRoute(const ComparatorScreen())),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: c.card,
+                          borderRadius: BorderRadius.circular(50),
+                          border: Border.all(color: c.border),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.compare_arrows_rounded, size: 16, color: c.textSecondary),
+                          const SizedBox(width: 7),
+                          Text('Comparer', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                              color: c.textSecondary)),
+                        ]),
+                      ),
+                    );
+                  }),
+                  if (!_filter.isEmpty) ...[
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => setState(() => _filter = const SpeciesFilter()),
+                      child: Text('Réinitialiser',
+                          style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textMuted,
+                              fontWeight: FontWeight.w500)),
+                    ),
                   ],
-                )),
+                    ]),
+                  )),
+                  const SizedBox(width: 10),
+                  Text('${speciesResults.length} ${speciesResults.length > 1 ? 'espèces' : 'espèce'}',
+                      style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
+                ]),
               )),
 
               if (speciesResults.isEmpty)
                 SliverToBoxAdapter(child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 40, 20, 0),
                   child: Column(children: [
-                    Icon(Icons.search_off, size: 44, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
+                    Icon(_favoritesOnly ? Icons.favorite_border : Icons.search_off,
+                        size: 44, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
                     const SizedBox(height: 12),
-                    Text('Aucun reptile trouvé', textAlign: TextAlign.center,
+                    Text(_favoritesOnly ? 'Aucun favori pour l\'instant' : 'Aucun reptile trouvé',
+                        textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 15, color: ThemeService.instance.colors.textMuted)),
+                    if (_favoritesOnly) ...[
+                      const SizedBox(height: 6),
+                      Text('Appuie sur le ♥ d\'une fiche pour l\'ajouter.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textHint)),
+                    ],
                   ]),
                 ))
               else
@@ -236,15 +305,43 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   sliver: SliverGrid(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.80),
+                      crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 0.72),
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => SpeciesCard(species: speciesResults[i]),
+                      (ctx, i) => SpeciesCard(
+                          key: ValueKey(speciesResults[i].id), species: speciesResults[i]),
                       childCount: speciesResults.length,
+                      findChildIndexCallback: (key) {
+                        final id = (key as ValueKey).value;
+                        final idx = speciesResults.indexWhere((s) => s.id == id);
+                        return idx < 0 ? null : idx;
+                      },
                     ),
                   ),
                 ),
+            ] else if (_section == 0) ...[
+              // ── Général : liste des salons ──────────────────────────────
+              SliverToBoxAdapter(child: StreamBuilder<List<CommunityPost>>(
+                stream: CommunityService.postsStream(),
+                builder: (ctx, snap) {
+                  final general = (snap.data ?? []).where((p) => p.scenario == null).toList();
+                  int countFor(String key) => general.where((p) => p.category == key).length;
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                    child: Column(children: [
+                      for (final salon in PostCategory.salons) ...[
+                        _SalonCard(
+                          salon: salon,
+                          count: countFor(salon.key),
+                          onTap: () => Navigator.of(context).push(fadeRoute(SalonScreen(salon: salon))),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ]),
+                  );
+                },
+              )),
             ] else ...[
-              // ── Général (0) / Scénarios (1) : flux de posts ─────────────
+              // ── Scénarios : flux de posts avec scénario ─────────────────
               StreamBuilder<List<CommunityPost>>(
                 stream: CommunityService.postsStream(),
                 builder: (ctx, snap) {
@@ -256,27 +353,19 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
                       )),
                     );
                   }
-                  final all = snap.data ?? [];
-                  final isScenarios = _section == 1;
-                  // Un post "scénario" = un post avec un scénario joint.
-                  final posts = all.where((p) =>
-                      isScenarios ? p.scenario != null : p.scenario == null).toList();
-
+                  final posts = (snap.data ?? []).where((p) => p.scenario != null).toList();
                   if (posts.isEmpty) {
                     return SliverToBoxAdapter(child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
                       child: Column(children: [
                         const SizedBox(height: 30),
-                        Icon(isScenarios ? Icons.auto_awesome_outlined : Icons.people_outline,
+                        Icon(Icons.auto_awesome_outlined,
                             size: 48, color: ThemeService.instance.colors.textMuted.withValues(alpha: 0.4)),
                         const SizedBox(height: 16),
-                        Text(isScenarios ? 'Aucun scénario partagé' : 'Sois le premier à poster !',
-                            textAlign: TextAlign.center,
+                        Text('Aucun scénario partagé', textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 16, color: ThemeService.instance.colors.textMuted)),
                         const SizedBox(height: 8),
-                        Text(isScenarios
-                                ? 'Partage un scénario depuis l\'onglet Scénarios.'
-                                : 'Partage ton setup, une astuce ou une photo.',
+                        Text('Partage un scénario depuis l\'onglet Scénarios.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textHint)),
                       ]),
@@ -301,36 +390,28 @@ class _CommunauteScreenState extends State<CommunauteScreen> {
   }
 
   void _showNewPost(BuildContext context, {TerraScenario? scenario}) {
+    if (_sheetOpen) return; // déjà ouvert
     final messenger = ScaffoldMessenger.of(context);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
+    // Feuille PERSISTANTE (pas modale) : le fil reste scrollable derrière
+    // pendant la rédaction du post.
+    final ctrl = _scaffoldKey.currentState?.showBottomSheet(
+      (ctx) => _NewPostSheet(messenger: messenger, scenario: scenario),
       backgroundColor: ThemeService.instance.colors.card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _NewPostSheet(messenger: messenger, scenario: scenario),
+      elevation: 20,
     );
+    _sheetOpen = ctrl != null;
+    ctrl?.closed.whenComplete(() => _sheetOpen = false);
   }
-}
 
-class _CategoryBadge extends StatelessWidget {
-  final PostCategory category;
-  const _CategoryBadge({required this.category});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = ThemeService.instance.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: c.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(category.icon, size: 11, color: c.primary),
-        const SizedBox(width: 4),
-        Text(category.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.primary)),
-      ]),
+  Future<void> _openFilterSheet() async {
+    final result = await showModalBottomSheet<SpeciesFilter>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SpeciesFilterSheet(initial: _filter),
     );
+    if (result != null) setState(() => _filter = result);
   }
 }
 
@@ -381,13 +462,257 @@ class _SectionToggle extends StatelessWidget {
   }
 }
 
-// ── Puce de filtre catégorie (Reptiles) ──────────────────────────────────────
+// ── Filtre des espèces (Reptiles) ────────────────────────────────────────────
 
-class _CatChip extends StatelessWidget {
+/// Détermine la tranche de taille d'une espèce à partir de son texte
+/// (« 20–25 cm », « 1,2–1,5 m »…). Renvoie null si la taille est inconnue.
+String? speciesSizeBucket(String raw) {
+  final s = raw.toLowerCase();
+  final matches = RegExp(r'\d+(?:[.,]\d+)?').allMatches(s);
+  if (matches.isEmpty) return null;
+  double maxV = 0;
+  for (final m in matches) {
+    final v = double.tryParse(m.group(0)!.replaceAll(',', '.'));
+    if (v != null && v > maxV) maxV = v;
+  }
+  if (maxV == 0) return null;
+  final cm = s.contains('cm') ? maxV : maxV * 100;
+  if (cm < 40) return 'Petit';
+  if (cm <= 120) return 'Moyen';
+  return 'Grand';
+}
+
+/// État immuable du filtre appliqué à la liste d'espèces.
+class SpeciesFilter {
+  final Set<String> types;
+  final Set<String> difficulties;
+  final Set<String> sizes;
+  final bool certifOnly;
+  final bool venomousOnly;
+
+  const SpeciesFilter({
+    this.types = const {},
+    this.difficulties = const {},
+    this.sizes = const {},
+    this.certifOnly = false,
+    this.venomousOnly = false,
+  });
+
+  bool get isEmpty =>
+      types.isEmpty && difficulties.isEmpty && sizes.isEmpty && !certifOnly && !venomousOnly;
+
+  int get count =>
+      types.length + difficulties.length + sizes.length + (certifOnly ? 1 : 0) + (venomousOnly ? 1 : 0);
+
+  bool matches(ReptileSpecies s) {
+    if (types.isNotEmpty && !types.contains(s.category)) return false;
+    if (difficulties.isNotEmpty && !difficulties.contains(s.difficulty)) return false;
+    if (certifOnly && !s.professional) return false;
+    if (venomousOnly && !s.venomous) return false;
+    if (sizes.isNotEmpty && !sizes.contains(speciesSizeBucket(s.adultSize))) return false;
+    return true;
+  }
+}
+
+/// Bouton « Filtres » qui ouvre la feuille de filtres (avec pastille du nombre).
+class _FilterButton extends StatelessWidget {
+  final bool active;
+  final int count;
+  final VoidCallback onTap;
+  const _FilterButton({required this.active, required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? c.primary : c.card,
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(color: active ? c.primary : c.border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.tune, size: 16, color: active ? c.bg : c.textSecondary),
+          const SizedBox(width: 8),
+          Text('Filtres', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+              color: active ? c.bg : c.textSecondary)),
+          if (count > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+              decoration: BoxDecoration(color: c.bg.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(50)),
+              child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.bg)),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Feuille de filtres ───────────────────────────────────────────────────────
+
+class _SpeciesFilterSheet extends StatefulWidget {
+  final SpeciesFilter initial;
+  const _SpeciesFilterSheet({required this.initial});
+
+  @override
+  State<_SpeciesFilterSheet> createState() => _SpeciesFilterSheetState();
+}
+
+class _SpeciesFilterSheetState extends State<_SpeciesFilterSheet> {
+  late Set<String> _types = {...widget.initial.types};
+  late Set<String> _difficulties = {...widget.initial.difficulties};
+  late Set<String> _sizes = {...widget.initial.sizes};
+  late bool _certif = widget.initial.certifOnly;
+  late bool _venom = widget.initial.venomousOnly;
+
+  static const _typeOptions = ['Lézard', 'Serpent', 'Araignée', 'Tortue', 'Amphibien', 'Autre'];
+  static const _diffOptions = ['Débutant', 'Intermédiaire', 'Avancé'];
+  static const _sizeOptions = {
+    'Petit': '< 40 cm',
+    'Moyen': '40 cm – 1,2 m',
+    'Grand': '> 1,2 m',
+  };
+
+  int get _count =>
+      _types.length + _difficulties.length + _sizes.length + (_certif ? 1 : 0) + (_venom ? 1 : 0);
+
+  void _toggle(Set<String> set, String value) {
+    setState(() => set.contains(value) ? set.remove(value) : set.add(value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      decoration: BoxDecoration(
+        color: c.card,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const SizedBox(height: 10),
+        Container(width: 40, height: 4, decoration: BoxDecoration(
+            color: c.border, borderRadius: BorderRadius.circular(50))),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 16, 10),
+          child: Row(children: [
+            Icon(Icons.tune_rounded, size: 22, color: c.primary),
+            const SizedBox(width: 10),
+            Text('Filtres', style: AppTextStyles.serif28),
+            const Spacer(),
+            if (_count > 0)
+              GestureDetector(
+                onTap: () => setState(() {
+                  _types = {}; _difficulties = {}; _sizes = {}; _certif = false; _venom = false;
+                }),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.close, size: 13, color: c.textMuted),
+                    const SizedBox(width: 5),
+                    Text('Effacer', style: TextStyle(fontSize: 12.5, color: c.textMuted, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+          ]),
+        ),
+        Flexible(child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _section('Type'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final t in _typeOptions)
+                _SelectChip(label: t, selected: _types.contains(t), onTap: () => _toggle(_types, t)),
+            ]),
+            const SizedBox(height: 22),
+
+            _section('Difficulté'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final d in _diffOptions)
+                _SelectChip(label: d, selected: _difficulties.contains(d), onTap: () => _toggle(_difficulties, d)),
+            ]),
+            const SizedBox(height: 22),
+
+            _section('Taille adulte'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final e in _sizeOptions.entries)
+                _SelectChip(label: e.key, subtitle: e.value,
+                    selected: _sizes.contains(e.key), onTap: () => _toggle(_sizes, e.key)),
+            ]),
+            const SizedBox(height: 22),
+
+            _section('Particularités'),
+            _SwitchRow(
+              icon: Icons.workspace_premium_outlined,
+              label: 'Certificat de capacité requis',
+              value: _certif,
+              onChanged: (v) => setState(() => _certif = v),
+            ),
+            const SizedBox(height: 10),
+            _SwitchRow(
+              icon: Icons.warning_amber_rounded,
+              label: 'Espèces venimeuses',
+              value: _venom,
+              onChanged: (v) => setState(() => _venom = v),
+            ),
+          ]),
+        )),
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context, SpeciesFilter(
+              types: _types, difficulties: _difficulties, sizes: _sizes,
+              certifOnly: _certif, venomousOnly: _venom,
+            )),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: c.primary,
+                borderRadius: BorderRadius.circular(50),
+                boxShadow: [BoxShadow(color: c.primary.withValues(alpha: 0.3),
+                    blurRadius: 16, offset: const Offset(0, 5))],
+              ),
+              child: Text(_count > 0 ? 'Afficher les résultats ($_count)' : 'Afficher les résultats',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.bg)),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _section(String title) {
+    final c = ThemeService.instance.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 2),
+      child: Row(children: [
+        Container(width: 3, height: 13,
+            decoration: BoxDecoration(color: c.primary, borderRadius: BorderRadius.circular(50))),
+        const SizedBox(width: 8),
+        Text(title.toUpperCase(), style: AppTextStyles.eyebrow),
+      ]),
+    );
+  }
+}
+
+class _SelectChip extends StatelessWidget {
   final String label;
+  final String? subtitle;
   final bool selected;
   final VoidCallback onTap;
-  const _CatChip({required this.label, required this.selected, required this.onTap});
+  const _SelectChip({required this.label, this.subtitle, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -395,16 +720,69 @@ class _CatChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? c.primary : c.card,
+          color: selected ? c.primary.withValues(alpha: 0.16) : c.bg,
           borderRadius: BorderRadius.circular(50),
-          border: Border.all(color: selected ? c.primary : c.border),
+          border: Border.all(
+            color: selected ? c.primary : c.border,
+            width: selected ? 1.4 : 1,
+          ),
         ),
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-            color: selected ? c.bg : c.textSecondary)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600,
+              color: selected ? c.primary : c.textSecondary)),
+          if (subtitle != null) ...[
+            const SizedBox(width: 6),
+            Text(subtitle!, style: TextStyle(fontSize: 11,
+                color: selected ? c.primary.withValues(alpha: 0.75) : c.textMuted)),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _SwitchRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _SwitchRow({required this.icon, required this.label, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: value ? c.primary.withValues(alpha: 0.10) : c.bg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: value ? c.primary.withValues(alpha: 0.55) : c.border),
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: (value ? c.primary : c.textMuted).withValues(alpha: 0.15),
+            ),
+            child: Icon(icon, size: 19, color: value ? c.primary : c.textMuted),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label, style: TextStyle(fontSize: 14,
+              color: c.textPrimary, fontWeight: FontWeight.w500))),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: c.bg,
+            activeTrackColor: c.primary,
+          ),
+        ]),
       ),
     );
   }
@@ -454,10 +832,61 @@ class _SuggestedCard extends StatelessWidget {
   }
 }
 
-// ── Carte expert (au-dessus de la recherche Reptiles) ────────────────────────
+// ── Carrousel experts (au-dessus de la recherche Reptiles) ───────────────────
+
+class _ExpertCarousel extends StatefulWidget {
+  const _ExpertCarousel();
+
+  @override
+  State<_ExpertCarousel> createState() => _ExpertCarouselState();
+}
+
+class _ExpertCarouselState extends State<_ExpertCarousel> {
+  final _pageCtrl = PageController();
+  int _page = 0;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return Column(children: [
+      SizedBox(
+        height: 92,
+        child: PageView.builder(
+          controller: _pageCtrl,
+          onPageChanged: (i) => setState(() => _page = i),
+          itemCount: TerraExpert.all.length,
+          itemBuilder: (_, i) => _ExpertCard(expert: TerraExpert.all[i]),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        for (var i = 0; i < TerraExpert.all.length; i++)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: i == _page ? 7 : 6,
+            height: i == _page ? 7 : 6,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i == _page
+                  ? c.primary
+                  : c.textMuted.withValues(alpha: 0.35),
+            ),
+          ),
+      ]),
+    ]);
+  }
+}
 
 class _ExpertCard extends StatelessWidget {
-  const _ExpertCard();
+  final TerraExpert expert;
+  const _ExpertCard({required this.expert});
 
   @override
   Widget build(BuildContext context) {
@@ -471,28 +900,141 @@ class _ExpertCard extends StatelessWidget {
       ),
       child: Icon(Icons.person, color: c.bg, size: 28),
     );
-    return Container(
-      decoration: glassCard(radius: 20),
-      padding: const EdgeInsets.all(14),
-      child: Row(children: [
-        ClipOval(child: Image.asset(
-          'assets/species/expert.jpg',
-          width: 58, height: 58, fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback,
-        )),
-        const SizedBox(width: 14),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(Icons.verified, size: 15, color: c.primary),
-            const SizedBox(width: 5),
-            Flexible(child: Text('Théo Masini', maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.textPrimary))),
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+          fadeRoute(ExpertProfileScreen(expert: expert))),
+      child: Container(
+        decoration: glassCard(radius: 20),
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          ClipOval(child: Image.asset(
+            expert.imageAsset,
+            width: 58, height: 58, fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => fallback,
+          )),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.verified, size: 15, color: c.primary),
+              const SizedBox(width: 5),
+              Flexible(child: Text(expert.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.textPrimary))),
+            ]),
+            const SizedBox(height: 4),
+            Text(expert.cardDescription,
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: c.textMuted, height: 1.45)),
+          ])),
+          Icon(Icons.chevron_right, size: 20, color: c.textMuted),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Écran d'un salon ─────────────────────────────────────────────────────────
+
+class SalonScreen extends StatelessWidget {
+  final PostCategory salon;
+  const SalonScreen({super.key, required this.salon});
+
+  void _newPost(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: c.card,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => _NewPostSheet(messenger: ScaffoldMessenger.of(context), lockedSalon: salon.key),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return Scaffold(
+      backgroundColor: c.bg,
+      floatingActionButton: GestureDetector(
+        onTap: () => _newPost(context),
+        child: Container(
+          width: 58, height: 58,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [c.primary, Color.lerp(c.primary, Colors.black, 0.18)!],
+            ),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: c.primary.withValues(alpha: 0.40),
+                  blurRadius: 22, spreadRadius: 1, offset: const Offset(0, 7)),
+            ],
+          ),
+          child: Icon(Icons.add, color: c.bg, size: 28),
+        ),
+      ),
+      body: SafeArea(child: Column(children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Row(children: [
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Icon(Icons.arrow_back, color: c.textSecondary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Container(
+              width: 42, height: 42,
+              decoration: BoxDecoration(
+                color: c.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(salon.icon, size: 21, color: c.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(salon.label, style: AppTextStyles.serif28),
+              Text(salon.description, style: TextStyle(fontSize: 12.5, color: c.textMuted)),
+            ])),
           ]),
-          const SizedBox(height: 4),
-          Text("Passionné de terrariophilie depuis 10 ans, il fournit les informations de chaque fiche.",
-              style: TextStyle(fontSize: 12, color: c.textMuted, height: 1.45)),
-        ])),
-      ]),
+        ),
+        const SizedBox(height: 12),
+
+        Expanded(child: StreamBuilder<List<CommunityPost>>(
+          stream: CommunityService.postsStream(),
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator(color: c.primary));
+            }
+            final posts = (snap.data ?? [])
+                .where((p) => p.scenario == null && p.category == salon.key)
+                .toList();
+            if (posts.isEmpty) {
+              return Center(child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(salon.icon, size: 48, color: c.textMuted.withValues(alpha: 0.4)),
+                  const SizedBox(height: 16),
+                  Text('Rien dans ce salon pour l\'instant',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.textPrimary)),
+                  const SizedBox(height: 8),
+                  Text('Sois le premier à lancer la discussion ici.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: c.textMuted)),
+                ]),
+              ));
+            }
+            return ListView.builder(
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 90 + MediaQuery.of(context).padding.bottom),
+              itemCount: posts.length,
+              itemBuilder: (_, i) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _PostCard(post: posts[i]),
+              ),
+            );
+          },
+        )),
+      ])),
     );
   }
 }
@@ -502,7 +1044,8 @@ class _ExpertCard extends StatelessWidget {
 class _NewPostSheet extends StatefulWidget {
   final ScaffoldMessengerState messenger;
   final TerraScenario? scenario;
-  const _NewPostSheet({required this.messenger, this.scenario});
+  final String? lockedSalon; // salon imposé (post depuis un salon)
+  const _NewPostSheet({required this.messenger, this.scenario, this.lockedSalon});
   @override
   State<_NewPostSheet> createState() => _NewPostSheetState();
 }
@@ -513,6 +1056,7 @@ class _NewPostSheetState extends State<_NewPostSheet> {
   Uint8List? _imageBytes;
   bool _publishing = false;
   String? _error;
+  late String _category = widget.lockedSalon ?? PostCategory.question.key;
 
   Future<void> _pickImage(ImageSource source) async {
     final picked = await ImagePicker().pickImage(
@@ -533,20 +1077,10 @@ class _NewPostSheetState extends State<_NewPostSheet> {
     try {
       await CommunityService.createPost(_ctrl.text.trim(),
           pickedFile: _pickedFile, scenario: widget.scenario,
-          category: widget.scenario != null ? 'scenario' : 'general');
+          category: widget.scenario != null ? 'scenario' : _category);
       final messenger = widget.messenger;
       Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(
-        content: const Row(children: [
-          Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-          SizedBox(width: 10),
-          Text('Post publié !'),
-        ]),
-        backgroundColor: AppColors.card,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ));
+      showTerraToast(messenger, 'Post publié !');
     } catch (e) {
       if (mounted) setState(() { _publishing = false; _error = 'Erreur : $e'; });
     }
@@ -557,8 +1091,11 @@ class _NewPostSheetState extends State<_NewPostSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final kb = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      // Clavier ouvert : petit espace au-dessus du clavier.
+      // Clavier fermé : +96 pour passer au-dessus de la navbar flottante.
+      padding: EdgeInsets.only(bottom: kb + (kb > 0 ? 12 : 96)),
       child: SafeArea(top: false, child: Column(mainAxisSize: MainAxisSize.min, children: [
 
         // Handle + header
@@ -597,7 +1134,7 @@ class _NewPostSheetState extends State<_NewPostSheet> {
               const SizedBox(width: 12),
               Expanded(
                 child: TextField(
-                  controller: _ctrl, maxLines: 7, minLines: 5, autofocus: true,
+                  controller: _ctrl, maxLines: 6, minLines: 3, autofocus: true,
                   style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 15, height: 1.6),
                   decoration: InputDecoration(
                     hintText: widget.scenario != null
@@ -610,6 +1147,26 @@ class _NewPostSheetState extends State<_NewPostSheet> {
                 ),
               ),
             ]),
+
+            // Sélecteur de salon (post général uniquement)
+            if (widget.scenario == null && widget.lockedSalon == null) ...[
+              const SizedBox(height: 16),
+              Text('SALON', style: AppTextStyles.eyebrow),
+              const SizedBox(height: 8),
+              SizedBox(height: 34, child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final cat in PostCategory.salons) ...[
+                    _PostCatChip(
+                      category: cat,
+                      selected: _category == cat.key,
+                      onTap: () => setState(() => _category = cat.key),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              )),
+            ],
 
             // Carte scénario joint
             if (widget.scenario != null) ...[
@@ -777,6 +1334,114 @@ class _IconAction extends StatelessWidget {
   );
 }
 
+// ── Avatar d'un auteur (photo dénormalisée, sinon initiale) ──────────────────
+
+class _AuthorAvatar extends StatelessWidget {
+  final String? photoUrl;
+  final String name;
+  final double size;
+  const _AuthorAvatar({required this.photoUrl, required this.name, this.size = 40});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    final initial = Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [c.primary, c.radialTop],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: TextStyle(fontSize: size * 0.4, fontWeight: FontWeight.w600, color: c.bg),
+      )),
+    );
+    if (photoUrl == null || photoUrl!.isEmpty) return initial;
+    return ClipOval(child: Image.network(
+      photoUrl!, width: size, height: size, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => initial,
+    ));
+  }
+}
+
+// ── Catégories de posts ──────────────────────────────────────────────────────
+
+/// Chip de sélection de catégorie (dans la feuille de nouveau post).
+class _PostCatChip extends StatelessWidget {
+  final PostCategory category;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PostCatChip({required this.category, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? c.primary.withValues(alpha: 0.16) : c.bg,
+          borderRadius: BorderRadius.circular(50),
+          border: Border.all(color: selected ? c.primary : c.border, width: selected ? 1.4 : 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(category.icon, size: 15, color: selected ? c.primary : c.textMuted),
+          const SizedBox(width: 7),
+          Text(category.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+              color: selected ? c.primary : c.textSecondary)),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Carte d'un salon dans la liste du fil « Général ».
+class _SalonCard extends StatelessWidget {
+  final PostCategory salon;
+  final int count;
+  final VoidCallback onTap;
+  const _SalonCard({required this.salon, required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: glassCard(radius: 20),
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(
+              color: c.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(salon.icon, size: 24, color: c.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(salon.label,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary)),
+            const SizedBox(height: 2),
+            Text(salon.description,
+                style: TextStyle(fontSize: 12.5, color: c.textMuted)),
+          ])),
+          Text(count == 0 ? '—' : '$count',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.textMuted)),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right, size: 20, color: c.textMuted),
+        ]),
+      ),
+    );
+  }
+}
+
 // ── Post ─────────────────────────────────────────────────────────────────────
 
 class _PostCard extends StatefulWidget {
@@ -829,7 +1494,7 @@ class _PostCardState extends State<_PostCard> {
                   _OptionTile(
                     icon: Icons.flag_outlined, label: 'Signaler',
                     subtitle: 'Signaler un contenu inapproprié',
-                    onTap: () => Navigator.pop(context),
+                    onTap: () { Navigator.pop(context); _showReport(context); },
                   ),
                 const SizedBox(height: 6),
               ]),
@@ -856,6 +1521,25 @@ class _PostCardState extends State<_PostCard> {
     );
   }
 
+  void _showReport(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ReportSheet(
+        onSubmit: (reason, details) async {
+          try {
+            await CommunityService.reportPost(widget.post.id, reason, details: details);
+            showTerraToast(messenger, 'Merci, ton signalement a été envoyé.');
+          } catch (_) {
+            showTerraToast(messenger, 'Impossible d\'envoyer le signalement.', error: true);
+          }
+        },
+      ),
+    );
+  }
+
   void _showEdit(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -866,27 +1550,16 @@ class _PostCardState extends State<_PostCard> {
     );
   }
 
-  void _confirmDelete(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: ThemeService.instance.colors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Supprimer le post', style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600)),
-        content: Text('Cette action est irréversible.', style: TextStyle(color: ThemeService.instance.colors.textMuted, fontSize: 14)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx),
-              child: Text('Annuler', style: TextStyle(color: ThemeService.instance.colors.textMuted))),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await CommunityService.deletePost(widget.post.id);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: AppColors.red)),
-          ),
-        ],
-      ),
+  Future<void> _confirmDelete(BuildContext context) async {
+    final ok = await showTerraConfirmDialog(
+      context,
+      icon: Icons.delete_outline,
+      title: 'Supprimer le post',
+      message: 'Cette action est irréversible. Ton post sera définitivement retiré.',
+      confirmLabel: 'Supprimer',
+      destructive: true,
     );
+    if (ok == true) await CommunityService.deletePost(widget.post.id);
   }
 
   @override
@@ -904,30 +1577,11 @@ class _PostCardState extends State<_PostCard> {
           child: Row(children: [
             currentUid == post.uid
                 ? _UserAvatar(size: 40)
-                : Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [ThemeService.instance.colors.primary, ThemeService.instance.colors.radialTop],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Center(child: Text(
-                      post.username.isNotEmpty ? post.username[0].toUpperCase() : '?',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: ThemeService.instance.colors.bg),
-                    )),
-                  ),
+                : _AuthorAvatar(photoUrl: post.authorPhotoUrl, name: post.username, size: 40),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(child: Text(post.username, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary))),
-                if (post.scenario != null) ...[
-                  const SizedBox(width: 8),
-                  _CategoryBadge(category: PostCategory.byKey(post.category)),
-                ],
-              ]),
+              Text(post.username, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
               Text(post.timeAgo, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
             ])),
             GestureDetector(
@@ -946,18 +1600,21 @@ class _PostCardState extends State<_PostCard> {
           child: Text(post.caption, style: TextStyle(fontSize: 14, color: ThemeService.instance.colors.textPrimary, height: 1.6)),
         ),
 
-        // Image
-        if (post.imageUrl != null) ClipRRect(
-          borderRadius: post.caption.isEmpty
-              ? const BorderRadius.vertical(top: Radius.circular(24))
-              : BorderRadius.zero,
-          child: Image.network(
-            post.imageUrl!,
-            width: double.infinity, height: 220, fit: BoxFit.cover,
-            loadingBuilder: (_, child, progress) => progress == null ? child
-                : Container(height: 220, color: ThemeService.instance.colors.card,
-                    child: Center(child: CircularProgressIndicator(color: ThemeService.instance.colors.primary, strokeWidth: 2))),
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        // Image (tap → plein écran)
+        if (post.imageUrl != null) GestureDetector(
+          onTap: () => openFullscreenImage(context, post.imageUrl!),
+          child: ClipRRect(
+            borderRadius: post.caption.isEmpty
+                ? const BorderRadius.vertical(top: Radius.circular(24))
+                : BorderRadius.zero,
+            child: Image.network(
+              post.imageUrl!,
+              width: double.infinity, height: 220, fit: BoxFit.cover,
+              loadingBuilder: (_, child, progress) => progress == null ? child
+                  : Container(height: 220, color: ThemeService.instance.colors.card,
+                      child: Center(child: CircularProgressIndicator(color: ThemeService.instance.colors.primary, strokeWidth: 2))),
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           ),
         ),
 
@@ -1038,12 +1695,7 @@ class _SharedScenarioCardState extends State<_SharedScenarioCard> {
     try {
       await CommunityService.importSharedScenario(widget.scenario);
       if (mounted) setState(() { _importing = false; _imported = true; });
-      messenger.showSnackBar(SnackBar(
-        content: Text('Scénario "${widget.scenario.name}" importé !'),
-        backgroundColor: AppColors.card,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ));
+      showTerraToast(messenger, 'Scénario "${widget.scenario.name}" importé !');
     } catch (_) {
       if (mounted) setState(() => _importing = false);
     }
@@ -1159,6 +1811,167 @@ class _OptionTile extends StatelessWidget {
             ],
           ])),
         ]),
+      ),
+    );
+  }
+}
+
+// ── Signalement d'un post ─────────────────────────────────────────────────────
+
+class _ReportSheet extends StatefulWidget {
+  final Future<void> Function(String reason, String? details) onSubmit;
+  const _ReportSheet({required this.onSubmit});
+
+  @override
+  State<_ReportSheet> createState() => _ReportSheetState();
+}
+
+class _ReportSheetState extends State<_ReportSheet> {
+  static const _reasons = [
+    'Contenu inapproprié',
+    'Spam ou publicité',
+    'Informations dangereuses',
+    'Harcèlement ou haine',
+    'Autre',
+  ];
+
+  String? _selected;
+  final _detailsCtrl = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _detailsCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_selected == null || _sending) return;
+    setState(() => _sending = true);
+    await widget.onSubmit(_selected!, _detailsCtrl.text);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ThemeService.instance.colors;
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(12, 0, 12, 12 + bottomInset),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: c.border),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 10),
+            Container(width: 36, height: 4, decoration: BoxDecoration(
+                color: c.textHint, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(children: [
+                Icon(Icons.flag_outlined, size: 20, color: c.textPrimary),
+                const SizedBox(width: 10),
+                Text('Signaler ce post', style: TextStyle(fontSize: 17,
+                    fontWeight: FontWeight.w600, color: c.textPrimary)),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Align(alignment: Alignment.centerLeft,
+                child: Text('Choisis un motif de signalement.',
+                    style: TextStyle(fontSize: 13, color: c.textMuted)),
+              ),
+            ),
+            for (final r in _reasons)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _selected = r),
+                  behavior: HitTestBehavior.opaque,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _selected == r ? c.primary : c.bg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: _selected == r ? c.primary : c.border,
+                      ),
+                    ),
+                    child: Text(r,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: _selected == r ? c.bg : c.textSecondary,
+                        )),
+                  ),
+                ),
+              ),
+            if (_selected == 'Autre')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: c.bg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: TextField(
+                    controller: _detailsCtrl,
+                    autofocus: true,
+                    maxLines: 3,
+                    minLines: 2,
+                    style: TextStyle(color: c.textPrimary, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Précise le motif…',
+                      hintStyle: TextStyle(color: c.textMuted, fontSize: 14),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: GestureDetector(
+                onTap: _selected == null ? null : _submit,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  decoration: BoxDecoration(
+                    color: _selected == null ? c.card : AppColors.red,
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(color: _selected == null ? c.border : AppColors.red),
+                  ),
+                  child: _sending
+                      ? Center(child: SizedBox(width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)))
+                      : Text('Envoyer le signalement', textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
+                              color: _selected == null ? c.textMuted : Colors.white)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text('Annuler', style: TextStyle(fontSize: 14, color: c.textMuted)),
+              ),
+            ),
+            const SizedBox(height: 4),
+          ]),
+        ),
       ),
     );
   }
@@ -1353,11 +2166,7 @@ class _CommentsSectionState extends State<_CommentsSection> {
       await CommunityService.deleteComment(widget.postId, comment.id);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Erreur : $e'),
-          backgroundColor: AppColors.red,
-          behavior: SnackBarBehavior.floating,
-        ));
+        showTerraToast(context, 'Suppression impossible du commentaire.', error: true);
       }
     }
   }
@@ -1389,17 +2198,7 @@ class _CommentsSectionState extends State<_CommentsSection> {
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               c.uid == currentUid
                   ? _UserAvatar(size: 28)
-                  : Container(
-                      width: 28, height: 28,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: ThemeService.instance.colors.primary.withValues(alpha: 0.2),
-                      ),
-                      child: Center(child: Text(
-                        c.username.isNotEmpty ? c.username[0].toUpperCase() : '?',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: ThemeService.instance.colors.primary),
-                      )),
-                    ),
+                  : _AuthorAvatar(photoUrl: c.authorPhotoUrl, name: c.username, size: 28),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [

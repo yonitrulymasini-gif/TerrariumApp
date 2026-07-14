@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "477232001441-fgp20ib886akibt4mtohh3tro0pghf3n.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.terra_flutter",
+            "certificate_hash": "d1db3a1a7e53bef30725341e9a04d890dae3adf7"
+          }
+        },
+        {
           "client_id": "477232001441-ho6ssrfjeve4flj9cvap3fqt6pohm47e.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -31,10 +39,10 @@
               "client_type": 3
             },
             {
-              "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
+              "client_id": "477232001441-8eeud8res9s93kk64tv2noqmkmj85mpa.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.yoni.terrariumApp"
+                "bundle_id": "com.example.terraFlutter"
               }
             }
           ]
@@ -67,10 +75,10 @@
               "client_type": 3
             },
             {
-              "client_id": "477232001441-9tge2dqtc1cp15ufr9bn26b5jishspnt.apps.googleusercontent.com",
+              "client_id": "477232001441-8eeud8res9s93kk64tv2noqmkmj85mpa.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.yoni.terrariumApp"
+                "bundle_id": "com.example.terraFlutter"
               }
             }
           ]

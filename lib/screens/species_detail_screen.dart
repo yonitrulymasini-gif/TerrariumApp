@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/species_service.dart';
 import '../services/inaturalist_service.dart';
+import '../services/admin_service.dart';
+import '../services/favorites_service.dart';
 import '../utils/fade_route.dart';
 import 'species_edit_screen.dart';
 
@@ -40,25 +42,48 @@ class SpeciesCard extends StatelessWidget {
         decoration: glassCard(radius: 20),
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Visuel
-          AspectRatio(
-            aspectRatio: 1.5,
-            child: Stack(children: [
-              Positioned.fill(child: SpeciesVisual(species: species)),
-              if (species.professional)
-                const Positioned(top: 8, left: 8, child: _ProBadge()),
-            ]),
-          ),
+          // Visuel + bouton favori
+          Stack(children: [
+            AspectRatio(
+              aspectRatio: 1.5,
+              child: SpeciesVisual(species: species),
+            ),
+            Positioned(top: 8, right: 8, child: ListenableBuilder(
+              listenable: FavoritesService.instance,
+              builder: (_, __) {
+                final fav = FavoritesService.instance.isFavorite(species.id);
+                return GestureDetector(
+                  onTap: () => FavoritesService.instance.toggle(species.id),
+                  child: Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
+                    child: Icon(fav ? Icons.favorite : Icons.favorite_border,
+                        color: fav ? AppColors.red : Colors.white, size: 17),
+                  ),
+                );
+              },
+            )),
+          ]),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(species.commonName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
+              Row(children: [
+                Expanded(child: Text(species.commonName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary))),
+                if (species.professional) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.workspace_premium_rounded, size: 16, color: Color(0xFFF4C430)),
+                ],
+              ]),
               const SizedBox(height: 2),
               Text(species.scientificName, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: c.textMuted)),
               const SizedBox(height: 8),
               _DifficultyChip(label: speciesLevelLabel(species), color: speciesLevelColor(species)),
+              if (species.venomous) ...[
+                const SizedBox(height: 6),
+                const _VenomousBadge(),
+              ],
             ]),
           ),
         ]),
@@ -100,14 +125,31 @@ class SpeciesVisual extends StatelessWidget {
 
 /// Photo iNaturalist chargée par nom scientifique (cache : 1 requête/espèce).
 /// Le crédit CC est consultable via la bulle ⓘ de la galerie (fiche détail).
-class _INatFallback extends StatelessWidget {
+class _INatFallback extends StatefulWidget {
   final ReptileSpecies species;
   const _INatFallback({required this.species});
 
   @override
+  State<_INatFallback> createState() => _INatFallbackState();
+}
+
+class _INatFallbackState extends State<_INatFallback> {
+  // Future mémorisé : sinon un nouveau part à chaque rebuild (recherche) et
+  // le FutureBuilder repart en « chargement » → l'image clignote.
+  late Future<INatPhoto?> _future = INaturalistService.photoFor(widget.species.scientificName);
+
+  @override
+  void didUpdateWidget(_INatFallback old) {
+    super.didUpdateWidget(old);
+    if (old.species.scientificName != widget.species.scientificName) {
+      _future = INaturalistService.photoFor(widget.species.scientificName);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<INatPhoto?>(
-      future: INaturalistService.photoFor(species.scientificName),
+      future: _future,
       builder: (context, snap) {
         // Recherche encore en cours → spinner, pas « pas de photo ».
         if (snap.connectionState != ConnectionState.done) return const _PhotoLoading();
@@ -184,14 +226,31 @@ class _ProBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFC97E1A),
+        color: const Color(0xFFF4C430),
         borderRadius: BorderRadius.circular(50),
       ),
       child: const Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.workspace_premium_outlined, size: 12, color: Colors.white),
+        Icon(Icons.workspace_premium_outlined, size: 11, color: Colors.black87),
         SizedBox(width: 4),
-        Text('Certificat', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+        Text('Certificat', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Colors.black87)),
       ]),
+    );
+  }
+}
+
+class _VenomousBadge extends StatelessWidget {
+  const _VenomousBadge();
+  @override
+  Widget build(BuildContext context) {
+    const color = AppColors.red;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: const Text('Venimeux',
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
@@ -204,13 +263,13 @@ class _DifficultyChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(50),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
@@ -412,37 +471,63 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                     child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
                   ),
                 ),
-                // Édition manuelle de la fiche (infos remplies par l'équipe)
-                GestureDetector(
-                  onTap: _edit,
-                  child: Container(
-                    width: 40, height: 40,
-                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                    child: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+                Row(children: [
+                  // Favori
+                  ListenableBuilder(
+                    listenable: FavoritesService.instance,
+                    builder: (_, __) {
+                      final fav = FavoritesService.instance.isFavorite(species.id);
+                      return GestureDetector(
+                        onTap: () => FavoritesService.instance.toggle(species.id),
+                        child: Container(
+                          width: 40, height: 40,
+                          decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                          child: Icon(fav ? Icons.favorite : Icons.favorite_border,
+                              color: fav ? AppColors.red : Colors.white, size: 20),
+                        ),
+                      );
+                    },
                   ),
-                ),
+                  // Édition (réservée aux admins)
+                  if (AdminService.instance.isAdmin) ...[
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: _edit,
+                      child: Container(
+                        width: 40, height: 40,
+                        decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                        child: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
+                ]),
               ]),
             )),
           ]),
         ),
 
         SliverToBoxAdapter(child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
+          padding: EdgeInsets.fromLTRB(20, 4, 20, 40 + MediaQuery.of(context).padding.bottom),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // Titre
-            Row(children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(child: Text(species.commonName,
                   style: GoogleFonts.fraunces(fontSize: 26, fontWeight: FontWeight.w600, color: c.textPrimary))),
-              if (species.difficulty.isNotEmpty)
-                _DifficultyChip(label: speciesLevelLabel(species), color: speciesLevelColor(species)),
+              if (species.professional) ...[
+                const SizedBox(width: 8),
+                Padding(padding: const EdgeInsets.only(top: 6), child: const _ProBadge()),
+              ],
             ]),
             const SizedBox(height: 4),
             Text(species.scientificName,
                 style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: c.textMuted)),
-            if (species.category.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _Tag(species.category),
-            ],
+            const SizedBox(height: 10),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              if (species.category.isNotEmpty) _Tag(species.category),
+              if (species.difficulty.isNotEmpty)
+                _DifficultyChip(label: speciesLevelLabel(species), color: speciesLevelColor(species)),
+              if (species.venomous) const _VenomousBadge(),
+            ]),
 
             if (species.professional) ...[
               const SizedBox(height: 16),
@@ -462,6 +547,30 @@ class _SpeciesDetailScreenState extends State<SpeciesDetailScreen> {
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.textPrimary)),
                     const SizedBox(height: 4),
                     Text("Espèce réservée aux détenteurs certifiés (certificat de capacité + autorisation d'établissement).",
+                        style: TextStyle(fontSize: 12.5, color: c.textSecondary, height: 1.4)),
+                  ])),
+                ]),
+              ),
+            ],
+
+            if (species.venomous) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFB5179E).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFB5179E).withValues(alpha: 0.4)),
+                ),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.warning_amber_rounded, size: 20, color: Color(0xFFB5179E)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Espèce venimeuse',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text("Ne jamais manipuler à mains nues. Protocole d'urgence et sérum antivenimeux obligatoires.",
                         style: TextStyle(fontSize: 12.5, color: c.textSecondary, height: 1.4)),
                   ])),
                 ]),

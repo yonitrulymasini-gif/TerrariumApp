@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 class CloudinaryService {
   static const _cloudName = 'dp9fdg7vw';
   static const _uploadPreset = 'Terra_Flutter';
+  static const _maxBytes = 10 * 1024 * 1024; // 10 Mo
 
   /// Upload [bytes] et retourne l'URL sécurisée optimisée, ou null si échec.
   /// [transform] : transformation Cloudinary insérée dans l'URL (ex: 'w_900').
@@ -14,6 +15,9 @@ class CloudinaryService {
     String mime, {
     String transform = 'f_auto,q_auto,w_900',
   }) async {
+    // Garde-fous : uniquement des images, taille raisonnable.
+    if (!mime.startsWith('image/')) return null;
+    if (bytes.lengthInBytes > _maxBytes) return null;
     try {
       final b64 = base64Encode(bytes);
       final ext = mime.split('/').last;

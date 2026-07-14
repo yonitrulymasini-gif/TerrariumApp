@@ -77,6 +77,30 @@ class DeviceService extends ChangeNotifier {
         .set(device.toMap());
   }
 
+  /// Renomme un terrarium (titre affiché).
+  Future<void> setDeviceName(String serialId, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+
+    _devices = [
+      for (final d in _devices)
+        d.serialId == serialId ? d.copyWith(name: trimmed) : d,
+    ];
+    notifyListeners();
+
+    if (kDemoMode) return;
+
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('devices')
+        .doc(serialId)
+        .update({'name': trimmed});
+  }
+
   Future<void> removeDevice(String serialId) async {
     _devices = _devices.where((d) => d.serialId != serialId).toList();
     notifyListeners();
@@ -117,6 +141,12 @@ class TerraDevice {
     required this.name,
     this.online = false,
   });
+
+  TerraDevice copyWith({String? name, bool? online}) => TerraDevice(
+        serialId: serialId,
+        name: name ?? this.name,
+        online: online ?? this.online,
+      );
 
   factory TerraDevice.fromMap(String id, Map<String, dynamic> map) => TerraDevice(
         serialId: id,

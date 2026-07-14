@@ -6,7 +6,6 @@ import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
@@ -18,6 +17,10 @@ import '../services/ptz_service.dart';
 import 'alerts_screen.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
+import 'camera_connect_screen.dart';
+import 'favorites_screen.dart';
+import '../widgets/terra_confirm_dialog.dart';
+import '../widgets/terra_toast.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,32 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Bonjour', style: AppTextStyles.eyebrow),
-                            const SizedBox(height: 4),
-                            Text(
-                              FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true
-                                  ? FirebaseAuth.instance.currentUser!.displayName!.trim()
-                                  : 'toi',
-                              style: AppTextStyles.serif28,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                        // Logo Terra. (le point prend la couleur du thème)
-                        Expanded(child: Center(child: RichText(
-                          text: TextSpan(
-                            style: GoogleFonts.fraunces(fontSize: 24, fontWeight: FontWeight.w700,
-                                color: ThemeService.instance.colors.textPrimary),
-                            children: [
-                              const TextSpan(text: 'Terra'),
-                              TextSpan(text: '.',
-                                  style: TextStyle(color: ThemeService.instance.colors.primary)),
-                            ],
-                          ),
-                        ))),
+                        // Notifications (gauche)
                         StreamBuilder<int>(
                           stream: AlertsScreen.unreadCount(),
                           builder: (ctx, snap) {
@@ -123,16 +101,34 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
+                        // Logo Terra. (le point prend la couleur du thème)
+                        RichText(
+                          text: TextSpan(
+                            style: GoogleFonts.fraunces(fontSize: 24, fontWeight: FontWeight.w700,
+                                color: ThemeService.instance.colors.textPrimary),
+                            children: [
+                              const TextSpan(text: 'Terra'),
+                              TextSpan(text: '.',
+                                  style: TextStyle(color: ThemeService.instance.colors.primary)),
+                            ],
+                          ),
+                        ),
+                        // Favoris (droite)
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).push(fadeRoute(const FavoritesScreen())),
+                          child: Container(
+                            width: 44, height: 44,
+                            decoration: glassCard(radius: 22),
+                            child: Icon(Icons.favorite_border,
+                                color: ThemeService.instance.colors.textPrimary, size: 20),
+                          ),
+                        ),
                       ],
                     ),
                   ),
 
                   // Carte terrarium
-                  _TerrariumCard(device: DeviceService.instance.devices.first),
-                  const SizedBox(height: 20),
-
-                  // Caméra
-                  _CameraCard(),
+                  _TerrariumCard(device: DeviceService.instance.devices.first, index: 0),
                   const SizedBox(height: 20),
 
                   // Prises rapides
@@ -207,7 +203,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 20),
 
+                  // Caméra
+                  _CameraCard(),
+                  const SizedBox(height: 20),
+
                   // CTA ajouter terrarium
+                  Text('AJOUTER', style: AppTextStyles.eyebrow),
+                  const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
                     decoration: glassCard(radius: 24),
@@ -227,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 16, color: ThemeService.instance.colors.textPrimary, fontWeight: FontWeight.w500)),
                         const SizedBox(height: 6),
-                        Text('Connecte ton ESP32 pour démarrer la surveillance',
+                        Text('Scan le QR code dans ta boîte\npour appairer ton nouveau boîtier.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textMuted, height: 1.6)),
                         const SizedBox(height: 16),
@@ -262,7 +264,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _TerrariumCard extends StatelessWidget {
   final TerraDevice device;
-  const _TerrariumCard({required this.device});
+  final int index;
+  const _TerrariumCard({required this.device, required this.index});
+
+  /// Titre affiché : le nom personnalisé, ou « Jungle tropicale » par défaut
+  /// (nom vide ou ancien nom auto-généré « Terrarium #N »).
+  String get _title {
+    final n = device.name.trim();
+    if (n.isEmpty || RegExp(r'^Terrarium #\d+$').hasMatch(n)) return 'Jungle Tropicale';
+    return n;
+  }
+
+  Future<void> _renameDevice(BuildContext context, TerraDevice device) async {
+    final name = await showTerraInputDialog(
+      context,
+      icon: Icons.eco_outlined,
+      title: 'Renommer le terrarium',
+      message: 'Choisis un nouveau titre pour ce terrarium.',
+      hint: 'Nom du terrarium',
+      initialValue: _title,
+      confirmLabel: 'Enregistrer',
+    );
+    if (name != null && name.trim().isNotEmpty) {
+      await DeviceService.instance.setDeviceName(device.serialId, name.trim());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,17 +318,23 @@ class _TerrariumCard extends StatelessWidget {
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
                           color: online ? ThemeService.instance.colors.primary : ThemeService.instance.colors.textMuted)),
                 ]),
-                Text(device.name, style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
+                Text('Terrarium #${index + 1}', style: TextStyle(fontSize: 12, color: ThemeService.instance.colors.textMuted)),
               ]),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-              child: Row(children: [
-                Icon(Icons.eco_outlined, color: ThemeService.instance.colors.primary, size: 22),
-                const SizedBox(width: 10),
-                Text('Jungle tropicale',
-                    style: GoogleFonts.fraunces(fontSize: 22, color: ThemeService.instance.colors.textPrimary, fontWeight: FontWeight.w600)),
-              ]),
+              child: GestureDetector(
+                onTap: () => _renameDevice(context, device),
+                behavior: HitTestBehavior.opaque,
+                child: Row(children: [
+                  Icon(Icons.eco_outlined, color: ThemeService.instance.colors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Flexible(child: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.fraunces(fontSize: 22, color: ThemeService.instance.colors.textPrimary, fontWeight: FontWeight.w600))),
+                  const SizedBox(width: 8),
+                  Icon(Icons.edit_outlined, size: 16, color: ThemeService.instance.colors.textMuted),
+                ]),
+              ),
             ),
             Container(
               decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0x18507850)))),
@@ -487,50 +519,10 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   void _retry() => _reload();
 
   Future<void> _showUrlDialog() async {
-    final ctrl = TextEditingController(text: CameraService.instance.rtspUrl ?? '');
-    final c = ThemeService.instance.colors;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: c.card,
-        title: Text('URL RTSP de la caméra', style: TextStyle(color: c.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Exemple :', style: TextStyle(fontSize: 12, color: c.textMuted)),
-          const SizedBox(height: 2),
-          Text('rtsp://192.168.1.100:554/stream', style: TextStyle(fontSize: 11, color: c.textMuted, fontFamily: 'monospace')),
-          const SizedBox(height: 14),
-          TextField(
-            controller: ctrl,
-            autofocus: true,
-            keyboardType: TextInputType.url,
-            style: TextStyle(color: c.textPrimary, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'rtsp://...',
-              hintStyle: TextStyle(color: c.textMuted),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.border)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: c.primary)),
-            ),
-          ),
-        ]),
-        actions: [
-          if (CameraService.instance.hasCamera)
-            TextButton(
-              onPressed: () { CameraService.instance.clear(); Navigator.pop(context); },
-              child: Text('Supprimer', style: TextStyle(color: AppColors.red)),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Annuler', style: TextStyle(color: c.textMuted)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, ctrl.text),
-            child: Text('OK', style: TextStyle(color: c.primary, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-    ctrl.dispose();
-    if (result != null) await CameraService.instance.setUrl(result);
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => const CameraConnectScreen(),
+      fullscreenDialog: true,
+    ));
   }
 
   @override
@@ -541,21 +533,19 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text('CAMÉRA', style: AppTextStyles.eyebrow),
-        GestureDetector(
-          onTap: _showUrlDialog,
-          child: Text(
-            hasStream ? 'Changer' : 'Configurer',
-            style: TextStyle(fontSize: 13, color: c.primary, fontWeight: FontWeight.w500),
+        if (hasStream)
+          GestureDetector(
+            onTap: _showUrlDialog,
+            child: Text('Changer', style: TextStyle(fontSize: 13, color: c.primary, fontWeight: FontWeight.w500)),
           ),
-        ),
       ]),
       const SizedBox(height: 12),
       ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(hasStream ? 20 : 24),
         child: Container(
           width: double.infinity,
-          height: 210,
-          decoration: glassCard(radius: 20),
+          height: hasStream ? 210 : null,
+          decoration: glassCard(radius: hasStream ? 20 : 24),
           child: hasStream ? _buildStream(c) : _buildPlaceholder(c),
         ),
       ),
@@ -602,12 +592,7 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ThemeService.instance.colors.card,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ));
+    showTerraToast(context, msg);
   }
 
   Future<void> _capture() async {
@@ -703,41 +688,45 @@ class _CameraCardState extends State<_CameraCard> with WidgetsBindingObserver {
   }
 
   Widget _buildPlaceholder(dynamic c) {
-    return Stack(children: [
-      Positioned.fill(child: Container(color: Colors.black.withValues(alpha: 0.85))),
-      Positioned.fill(child: CustomPaint(painter: _GridPainter(color: Colors.white.withValues(alpha: 0.05)))),
-      Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 56, height: 56,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: c.primary.withValues(alpha: 0.15),
-            border: Border.all(color: c.primary.withValues(alpha: 0.35), width: 1.5),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 0),
+      child: Column(
+        children: [
+          Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: c.primary.withValues(alpha: 0.15),
+            ),
+            child: Icon(Icons.videocam_outlined, color: c.primary, size: 24),
           ),
-          child: Icon(Icons.videocam_outlined, color: c.primary, size: 26),
-        ),
-        const SizedBox(height: 10),
-        const Text('Aucune caméra configurée', style: TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 4),
-        const Text('Appuie sur "Configurer" pour ajouter l\'URL RTSP', style: TextStyle(fontSize: 11, color: Colors.white38)),
-      ])),
-    ]);
+          const SizedBox(height: 12),
+          Text('Connecte ta caméra',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, color: c.textPrimary, fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+          Text('Scan le QR code dans ta boîte\npour appairer ta caméra.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: c.textMuted, height: 1.6)),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: _showUrlDialog,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: c.primary,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [BoxShadow(color: c.primary.withValues(alpha: 0.25),
+                    blurRadius: 16, offset: const Offset(0, 6))],
+              ),
+              child: Text('Connecter une caméra',
+                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: c.bg)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
-}
-
-class _GridPainter extends CustomPainter {
-  final Color color;
-  _GridPainter({required this.color});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = color..strokeWidth = 0.5;
-    for (int i = 1; i < 3; i++) {
-      canvas.drawLine(Offset(0, size.height * i / 3), Offset(size.width, size.height * i / 3), p);
-      canvas.drawLine(Offset(size.width * i / 3, 0), Offset(size.width * i / 3, size.height), p);
-    }
-  }
-  @override
-  bool shouldRepaint(_GridPainter old) => old.color != color;
 }
 
 // ── D-pad d'orientation PTZ ──────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,12 +9,16 @@ import '../services/theme_service.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/device_service.dart';
+import '../services/admin_service.dart';
 import '../utils/fade_route.dart';
 import 'onboarding_screen.dart';
 import 'mes_appareils_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'preferences_screen.dart';
 import 'aide_screen.dart';
+import 'moderation_screen.dart';
+import 'edit_profile_screen.dart';
+import 'image_crop_screen.dart';
 
 class ProfilScreen extends StatefulWidget {
   const ProfilScreen({super.key});
@@ -30,12 +35,14 @@ class _ProfilScreenState extends State<ProfilScreen> {
   void initState() {
     super.initState();
     DeviceService.instance.addListener(_onChange);
+    AdminService.instance.addListener(_onChange);
     _loadStats();
   }
 
   @override
   void dispose() {
     DeviceService.instance.removeListener(_onChange);
+    AdminService.instance.removeListener(_onChange);
     super.dispose();
   }
 
@@ -44,15 +51,29 @@ class _ProfilScreenState extends State<ProfilScreen> {
   Future<void> _changeAvatar() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80,
-      maxWidth: 800,
-      maxHeight: 800,
+      imageQuality: 90,
+      maxWidth: 1200,
+      maxHeight: 1200,
     );
     if (picked == null) return;
+
+    // Étape de recadrage (carré) avant l'upload.
+    final original = await picked.readAsBytes();
+    if (!mounted) return;
+    final cropped = await Navigator.of(context).push<Uint8List>(MaterialPageRoute(
+      builder: (_) => ImageCropScreen(
+        imageBytes: original,
+        aspectRatio: 1,
+        circle: true,
+        title: 'Cadrer ta photo',
+      ),
+      fullscreenDialog: true,
+    ));
+    if (cropped == null) return; // annulé
+
     setState(() => _uploadingAvatar = true);
     try {
-      final bytes = await picked.readAsBytes();
-      await ProfileService.updateAvatar(bytes, picked.mimeType ?? 'image/jpeg');
+      await ProfileService.updateAvatar(cropped, 'image/png');
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -155,6 +176,17 @@ class _ProfilScreenState extends State<ProfilScreen> {
             Text('COMPTE', style: AppTextStyles.eyebrow),
             const SizedBox(height: 12),
             _MenuSection(items: [
+              if (!isAnon)
+                _MenuItem(
+                  icon: Icons.person_outline,
+                  iconColor: ThemeService.instance.colors.primary,
+                  title: 'Modifier mon profil',
+                  subtitle: 'Prénom, niveau, animaux',
+                  onTap: () async {
+                    await Navigator.of(context).push(fadeRoute(const EditProfileScreen()));
+                    if (mounted) setState(() {}); // rafraîchit le nom affiché
+                  },
+                ),
               _MenuItem(
                 icon: Icons.eco_outlined,
                 iconColor: ThemeService.instance.colors.primary,
@@ -179,6 +211,22 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 onTap: () => Navigator.of(context).push(fadeRoute(const PreferencesScreen())),
               ),
             ]),
+
+            // ── Admin (réservé aux modérateurs) ─────────────────────────────
+            if (AdminService.instance.isAdmin) ...[
+              const SizedBox(height: 24),
+              Text('ADMINISTRATION', style: AppTextStyles.eyebrow),
+              const SizedBox(height: 12),
+              _MenuSection(items: [
+                _MenuItem(
+                  icon: Icons.shield_outlined,
+                  iconColor: ThemeService.instance.colors.primary,
+                  title: 'Modération',
+                  subtitle: 'Posts signalés',
+                  onTap: () => Navigator.of(context).push(fadeRoute(const ModerationScreen())),
+                ),
+              ]),
+            ],
 
             const SizedBox(height: 24),
             Text('SUPPORT', style: AppTextStyles.eyebrow),

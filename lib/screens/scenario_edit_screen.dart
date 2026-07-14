@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../services/theme_service.dart';
 import '../services/scenario_service.dart';
 import '../widgets/time_wheel_picker.dart';
+import '../widgets/terra_confirm_dialog.dart';
 
 class ScenarioEditScreen extends StatefulWidget {
   final TerraScenario? existing;
@@ -81,22 +82,14 @@ class _ScenarioEditScreenState extends State<ScenarioEditScreen> {
   }
 
   Future<void> _confirmDelete() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: ThemeService.instance.colors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Supprimer le scénario',
-            style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 17, fontWeight: FontWeight.w600)),
-        content: Text('Supprimer "${widget.existing!.name}" ? Cette action est irréversible.',
-            style: TextStyle(color: ThemeService.instance.colors.textMuted, fontSize: 14)),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('Annuler', style: TextStyle(color: ThemeService.instance.colors.textMuted))),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Supprimer', style: TextStyle(color: AppColors.red))),
-        ],
-      ),
+    final confirm = await showTerraConfirmDialog(
+      context,
+      icon: Icons.delete_outline,
+      title: 'Supprimer\nle scénario ?',
+      message: '« ${widget.existing!.name} » sera définitivement supprimé.',
+      confirmLabel: 'Supprimer',
+      cancelLabel: 'Le garder',
+      destructive: true,
     );
     if (confirm != true) return;
 
@@ -243,11 +236,14 @@ class _ScenarioEditScreenState extends State<ScenarioEditScreen> {
                 const SizedBox(height: 16),
                 Text('PRISE', style: AppTextStyles.eyebrow),
                 const SizedBox(height: 10),
-                Row(children: List.generate(4, (i) => Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: _Chip(label: 'Prise ${i + 1}', selected: _relay == i + 1,
-                      onTap: () => setState(() => _relay = i + 1)),
-                ))),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(children: List.generate(4, (i) => Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: _Chip(label: 'Prise ${i + 1}', selected: _relay == i + 1,
+                        onTap: () => setState(() => _relay = i + 1)),
+                  ))),
+                ),
                 const SizedBox(height: 36),
 
                 // Résumé

@@ -6,8 +6,10 @@ import '../app_config.dart';
 import '../services/device_service.dart';
 import '../services/telemetry_service.dart';
 import '../utils/fade_route.dart';
+import 'measure_chart_screen.dart';
 import 'pairing_screen.dart';
 import 'qr_scanner_screen.dart';
+import '../widgets/terra_confirm_dialog.dart';
 
 class MesuresScreen extends StatefulWidget {
   const MesuresScreen({super.key});
@@ -30,38 +32,27 @@ class _MesuresScreenState extends State<MesuresScreen> {
 
   void _onDeviceChange() => setState(() {});
 
+  void _openChart(String title, String unit, Color accent,
+      double? Function(TelemetryData) selector) {
+    Navigator.of(context).push(fadeRoute(MeasureChartScreen(
+      serialId: DeviceService.instance.devices.first.serialId,
+      title: title, unit: unit, accent: accent, selector: selector,
+    )));
+  }
+
   Future<void> _renameOutlet(BuildContext context, int index, String current) async {
-    final ctrl = TextEditingController(text: current);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: ThemeService.instance.colors.card,
-        title: Text('Renommer la prise', style: TextStyle(color: ThemeService.instance.colors.textPrimary, fontSize: 17)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: TextStyle(color: ThemeService.instance.colors.textPrimary),
-          decoration: InputDecoration(
-            hintText: 'Nom de la prise',
-            hintStyle: TextStyle(color: ThemeService.instance.colors.textMuted),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: ThemeService.instance.colors.border)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: ThemeService.instance.colors.primary)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Annuler', style: TextStyle(color: ThemeService.instance.colors.textMuted)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, ctrl.text),
-            child: Text('OK', style: TextStyle(color: ThemeService.instance.colors.primary, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+    final result = await showTerraInputDialog(
+      context,
+      icon: Icons.power_outlined,
+      title: 'Renommer la prise',
+      message: 'Choisis un nouveau nom pour cette prise.',
+      hint: 'Nom de la prise',
+      initialValue: current,
+      confirmLabel: 'Enregistrer',
     );
-    ctrl.dispose();
-    if (result != null) DeviceService.instance.setOutletName(index, result);
+    if (result != null && result.trim().isNotEmpty) {
+      DeviceService.instance.setOutletName(index, result.trim());
+    }
   }
 
 
@@ -161,15 +152,21 @@ class _MesuresScreenState extends State<MesuresScreen> {
               builder: (context, snap) {
                 final data = snap.data ?? TelemetryData.empty();
                 return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Température air', value: data.tempDisplay, unit: '°C', large: true),
+                  _SensorCard(icon: Icons.thermostat_outlined, iconColor: const Color(0xFFFB923C), label: 'Température air', value: data.tempDisplay, unit: '°C', large: true,
+                      onTap: () => _openChart('Température air', '°C', const Color(0xFFFB923C), (d) => d.temperature)),
                   const SizedBox(height: 12),
                   Row(children: [
-                    Expanded(child: _SensorCard(label: 'Point Froid', value: data.tempWithOffset(-0.6), unit: '°C')),
+                    Expanded(child: _SensorCard(label: 'Point Froid', value: data.tempWithOffset(-0.6), unit: '°C',
+                        onTap: () => _openChart('Point Froid', '°C', const Color(0xFFFB923C),
+                            (d) => d.temperature == null ? null : d.temperature! - 0.6))),
                     const SizedBox(width: 12),
-                    Expanded(child: _SensorCard(label: 'Point Chaud', value: data.tempWithOffset(0.9), unit: '°C')),
+                    Expanded(child: _SensorCard(label: 'Point Chaud', value: data.tempWithOffset(0.9), unit: '°C',
+                        onTap: () => _openChart('Point Chaud', '°C', const Color(0xFFFB923C),
+                            (d) => d.temperature == null ? null : d.temperature! + 0.9))),
                   ]),
                   const SizedBox(height: 12),
-                  _SensorCard(icon: Icons.water_drop_outlined, iconColor: const Color(0xFF38BDF8), label: 'Humidité', value: data.humidDisplay, unit: '%', large: true),
+                  _SensorCard(icon: Icons.water_drop_outlined, iconColor: const Color(0xFF38BDF8), label: 'Humidité', value: data.humidDisplay, unit: '%', large: true,
+                      onTap: () => _openChart('Humidité', '%', const Color(0xFF38BDF8), (d) => d.humidity)),
                 ]);
               },
             ),
@@ -201,7 +198,7 @@ class _MesuresScreenState extends State<MesuresScreen> {
                         const SizedBox(width: 14),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(outlet.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: ThemeService.instance.colors.textPrimary)),
-                          Text('Appui long pour renommer', style: TextStyle(fontSize: 11, color: ThemeService.instance.colors.textMuted)),
+                          Text('Appuie longtemps pour renommer', style: TextStyle(fontSize: 11, color: ThemeService.instance.colors.textMuted)),
                         ])),
                         GestureDetector(
                           onTap: () => DeviceService.instance.setOutletState(i, !isOn),
@@ -251,12 +248,15 @@ class _SensorCard extends StatelessWidget {
   final String value;
   final String unit;
   final bool large;
+  final VoidCallback? onTap;
   const _SensorCard({this.icon, this.iconColor, required this.label,
-      required this.value, required this.unit, this.large = false});
+      required this.value, required this.unit, this.large = false, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       decoration: glassCard(radius: 20),
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -273,6 +273,7 @@ class _SensorCard extends StatelessWidget {
           Text(unit, style: TextStyle(fontSize: 13, color: ThemeService.instance.colors.textMuted)),
         ]),
       ]),
+      ),
     );
   }
 }
